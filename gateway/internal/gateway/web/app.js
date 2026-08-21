@@ -14,7 +14,6 @@ const elements = {
   streamLabel: document.querySelector('#streamLabel'), videoNote: document.querySelector('#videoNote'),
   videoStats: document.querySelector('#videoStats'),
   socketState: document.querySelector('#socketState'), toast: document.querySelector('#toast'),
-  snapshotDialog: document.querySelector('#snapshotDialog'), snapshotImage: document.querySelector('#snapshotImage'),
   recordingDate: document.querySelector('#recordingDate'), recordingList: document.querySelector('#recordingList'),
   recordingSummary: document.querySelector('#recordingSummary'), recordingPlayer: document.querySelector('#recordingPlayer'),
   recordingPlayerEmpty: document.querySelector('#recordingPlayerEmpty'), recordingNow: document.querySelector('#recordingNow'),
@@ -341,13 +340,6 @@ function updateVideoStats() {
 
 document.querySelectorAll('[data-stream]').forEach(button => button.addEventListener('click', () => switchStream(button.dataset.stream)));
 elements.videoFrame.addEventListener('load', () => setTimeout(() => elements.placeholder.classList.add('hidden'), 700));
-document.querySelector('#fullscreenButton').addEventListener('click', () => document.querySelector('#videoShell').requestFullscreen?.());
-document.querySelector('#snapshotButton').addEventListener('click', () => {
-  elements.snapshotImage.src = `/api/snapshot?t=${Date.now()}`;
-  elements.snapshotDialog.showModal();
-});
-document.querySelector('#closeSnapshot').addEventListener('click', () => elements.snapshotDialog.close());
-
 function localDateValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
