@@ -1,0 +1,60 @@
+name: Build gateway ARMv7
+
+on:
+  push:
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-armv7.yml"
+  pull_request:
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-armv7.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: gateway/go.mod
+          cache-dependency-path: gateway/go.sum
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build Linux ARMv7 binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm
+          GOARM: "7"
+        run: go build -trimpath -ldflags="-s -w" -o lens-gateway-armv7 ./cmd/lens-gateway
+
+      - name: Package and checksum
+        run: |
+          chmod 0755 lens-gateway-armv7
+          sha256sum lens-gateway-armv7 > lens-gateway-armv7.sha256
+          tar -czf lens-gateway-armv7.tar.gz lens-gateway-armv7
+
+      - name: Upload ARMv7 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: lens-gateway-armv7-${{ github.sha }}
+          path: |
+            gateway/lens-gateway-armv7.tar.gz
+            gateway/lens-gateway-armv7.sha256
+          if-no-files-found: error
+          retention-days: 30
+

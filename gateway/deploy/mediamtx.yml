@@ -1,0 +1,30 @@
+logLevel: info
+logDestinations: [stdout]
+writeQueueSize: 128
+
+# Health and future recording playback APIs stay on loopback.
+api: true
+apiAddress: 127.0.0.1:9997
+playback: true
+playbackAddress: 127.0.0.1:9996
+
+# This instance only records a local RTSP source. Disable public servers.
+rtsp: false
+rtmp: false
+hls: false
+webrtc: false
+srt: false
+moq: false
+
+paths:
+  ipc-main:
+    source: rtsp://127.0.0.1:8554/ipc-main
+    sourceOnDemand: false
+    rtspTransport: tcp
+    record: true
+    recordPath: /mnt/recordings/%path/%Y-%m-%d/%H-%M-%S-%f
+    recordFormat: fmp4
+    recordPartDuration: 1s
+    recordMaxPartSize: 50M
+    recordSegmentDuration: 10m
+    recordDeleteAfter: 36h

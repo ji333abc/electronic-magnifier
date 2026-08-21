@@ -1,0 +1,30 @@
+[Unit]
+Description=Electronic magnifier control gateway
+After=network-online.target go2rtc.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lens-gateway
+Group=lens-gateway
+EnvironmentFile=/etc/lens-gateway/secrets.env
+ExecStart=/usr/local/bin/lens-gateway -config /etc/lens-gateway/config.json
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+MemoryMax=160M
+
+[Install]
+WantedBy=multi-user.target

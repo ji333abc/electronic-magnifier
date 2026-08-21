@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#08111f">
+  <title>电子放大镜控制台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div><strong>电子放大镜</strong><small>光学控制台</small></div>
+    </div>
+    <div class="top-actions">
+      <div class="health" aria-label="设备连接状态">
+        <span class="health-item" data-health="ipc"><i></i>IPC</span>
+        <span class="health-item" data-health="esp"><i></i>电机</span>
+        <span class="health-item" data-health="go2rtc"><i></i>视频</span>
+      </div>
+      <button class="icon-button" id="logoutButton" type="button">退出</button>
+    </div>
+  </header>
+
+  <main class="layout" id="app" hidden>
+    <section class="viewer-panel">
+      <div class="viewer-head">
+        <div>
+          <p class="eyebrow">实时画面</p>
+          <h1>低延迟镜头预览</h1>
+        </div>
+        <div class="stream-switch" role="group" aria-label="画质选择">
+          <button class="active" type="button" data-stream="main">高清</button>
+          <button type="button" data-stream="sub">流畅</button>
+        </div>
+      </div>
+      <div class="video-shell" id="videoShell">
+        <div class="video-placeholder" id="videoPlaceholder">
+          <span class="loader"></span><p>正在建立视频连接…</p>
+        </div>
+        <iframe id="videoFrame" title="IPC 实时视频" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe>
+        <div class="video-badge"><span></span><b id="streamLabel">主码流</b></div>
+        <div class="viewer-tools">
+          <button id="snapshotButton" type="button">快照</button>
+          <button id="fullscreenButton" type="button">全屏</button>
+        </div>
+      </div>
+      <p class="viewer-note">
+        <span id="videoNote">WebRTC · H.264 · 无音频</span>
+        <span id="videoStats">等待视频帧…</span>
+      </p>
+    </section>
+
+    <section class="controls-panel">
+      <div class="controls-head">
+        <div><p class="eyebrow">镜头调节</p><h2>三轴精密控制</h2></div>
+        <span class="socket-state" id="socketState"><i></i>连接中</span>
+      </div>
+      <div id="motorList" class="motor-list"></div>
+      <div class="emergency-row">
+        <button class="danger" id="stopAll" type="button">全部停止</button>
+        <button class="quiet" id="releaseAll" type="button">全部释放线圈</button>
+      </div>
+      <p class="safety-note">按住按钮连续运动，松开即停。页面断开后系统会在约 0.8 秒内自动释放电机。</p>
+    </section>
+
+    <section class="playback-panel">
+      <div class="playback-head">
+        <div><p class="eyebrow">录像回放</p><h2>最近 36 小时</h2></div>
+        <div class="recording-date-tools">
+          <button id="previousRecordingDay" type="button" aria-label="前一天">‹</button>
+          <input id="recordingDate" type="date" aria-label="录像日期">
+          <button id="nextRecordingDay" type="button" aria-label="后一天">›</button>
+          <button id="refreshRecordings" type="button">刷新</button>
+        </div>
+      </div>
+      <div class="playback-grid">
+        <div class="recording-player-shell">
+          <video id="recordingPlayer" controls playsinline preload="metadata"></video>
+          <div class="recording-empty" id="recordingPlayerEmpty">从右侧选择一个录像片段</div>
+        </div>
+        <aside class="recording-browser">
+          <div class="recording-summary" id="recordingSummary">正在读取录像…</div>
+          <div class="recording-list" id="recordingList"></div>
+        </aside>
+      </div>
+      <p class="recording-note" id="recordingNow">录像按 10 分钟片段显示，硬盘自动保留最近 36 小时。</p>
+    </section>
+  </main>
+
+  <div class="login-layer" id="loginLayer">
+    <form class="login-card" id="loginForm">
+      <span class="login-symbol" aria-hidden="true"></span>
+      <p class="eyebrow">安全访问</p>
+      <h1>进入控制台</h1>
+      <p>登录后可查看实时画面并控制三组镜头电机。</p>
+      <label>用户名<input id="username" name="username" autocomplete="username" value="admin" required></label>
+      <label>密码<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">登录</button>
+      <div class="form-error" id="loginError" role="alert"></div>
+    </form>
+  </div>
+
+  <dialog id="snapshotDialog">
+    <div class="dialog-head"><strong>IPC 快照</strong><button id="closeSnapshot" type="button">关闭</button></div>
+    <img id="snapshotImage" alt="IPC 当前快照">
+  </dialog>
+  <div class="toast" id="toast" role="status"></div>
+
+  <template id="motorTemplate">
+    <article class="motor-card">
+      <div class="motor-title">
+        <div><span class="motor-index"></span><h3></h3></div>
+        <span class="motor-status">空闲</span>
+      </div>
+      <div class="motor-settings">
+        <label>速度 <b class="speed-value"></b><input class="speed" type="range" min="10" max="1000" step="10"></label>
+        <label>步进模式<select class="mode"><option value="half">半步 · 精细</option><option value="full">全步 · 快速</option></select></label>
+      </div>
+      <div class="jog-row">
+        <button class="jog negative" type="button"><span></span></button>
+        <button class="motor-stop" type="button">停止</button>
+        <button class="jog positive" type="button"><span></span></button>
+      </div>
+      <div class="nudge-row" aria-label="定步微调"></div>
+      <label class="hold-option"><input class="hold" type="checkbox">移动后保持线圈通电</label>
+    </article>
+  </template>
+  <script src="/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+[Unit]
+Description=MediaMTX 36-hour IPC recorder
+After=network-online.target go2rtc.service
+Wants=network-online.target go2rtc.service
+RequiresMountsFor=/mnt/recordings
+
+[Service]
+Type=simple
+User=lens-gateway
+Group=lens-gateway
+WorkingDirectory=/etc/lens-gateway
+ExecStart=/usr/local/bin/mediamtx /etc/lens-gateway/mediamtx.yml
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+ReadWritePaths=/mnt/recordings
+MemoryMax=180M
+
+[Install]
+WantedBy=multi-user.target

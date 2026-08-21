@@ -1,0 +1,15 @@
+{
+  "listen": "0.0.0.0:80",
+  "espBaseUrl": "http://192.168.1.123",
+  "ipcBaseUrl": "http://192.168.1.122",
+  "go2rtcUrl": "http://127.0.0.1:1984",
+  "playbackUrl": "http://127.0.0.1:9996",
+  "mainStream": "ipc-main",
+  "subStream": "ipc-sub",
+  "sessionHours": 12,
+  "motors": [
+    { "id": 1, "name": "对焦 A", "negative": "近焦", "positive": "远焦", "defaultSpeed": 120, "defaultMode": "half" },
+    { "id": 2, "name": "变焦", "negative": "广角", "positive": "长焦", "defaultSpeed": 200, "defaultMode": "full" },
+    { "id": 3, "name": "对焦 B", "negative": "近焦", "positive": "远焦", "defaultSpeed": 120, "defaultMode": "half" }
+  ]
+}

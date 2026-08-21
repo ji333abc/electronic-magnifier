@@ -1,0 +1,30 @@
+app:
+  # `ws` registers /api/ws, which the bundled WebRTC player uses for signalling.
+  modules: [api, ws, rtsp, webrtc, mjpeg]
+
+api:
+  listen: "127.0.0.1:1984"
+  base_path: "/stream"
+  # API only listens on loopback; the authenticated gateway reverse proxy
+  # supplies the browser-facing origin for WebSocket signalling.
+  origin: "*"
+
+rtsp:
+  # Loopback-only output used by the recorder; never expose this port to LAN.
+  listen: "127.0.0.1:8554"
+  default_query: "video"
+
+streams:
+  ipc-main: rtsp://${IPC_USER}:${IPC_PASSWORD}@192.168.1.122:554/mpeg4
+  ipc-sub: rtsp://${IPC_USER}:${IPC_PASSWORD}@192.168.1.122:554/mpeg4cif
+
+webrtc:
+  listen: ":8555"
+  candidates:
+    - ${LAN_IP}:8555
+    - ${TAILSCALE_IP}:8555
+  ice_servers: []
+
+log:
+  level: info
+  format: text

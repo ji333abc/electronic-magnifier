@@ -1,0 +1,8 @@
+/lens-gateway
+/lens-gateway.exe
+/lens-gateway-armv7
+/mediamtx_v*_linux_armv7.tar.gz
+/mediamtx_checksums.sha256
+/lens-recorder-onecloud.tar.gz
+config.json
+.env

@@ -1,0 +1,14 @@
+[Unit]
+Description=Keep at least 8 GiB free on the recording disk
+RequiresMountsFor=/mnt/recordings
+
+[Service]
+Type=oneshot
+User=lens-gateway
+Group=lens-gateway
+ExecStart=/usr/local/lib/lens-gateway/recording-space-guard.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/mnt/recordings

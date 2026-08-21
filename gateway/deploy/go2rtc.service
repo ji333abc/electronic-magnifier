@@ -1,0 +1,29 @@
+[Unit]
+Description=go2rtc WebRTC video gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lens-gateway
+Group=lens-gateway
+EnvironmentFile=/etc/lens-gateway/secrets.env
+WorkingDirectory=/etc/lens-gateway
+ExecStart=/usr/local/bin/go2rtc -config /etc/lens-gateway/go2rtc.yaml
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# Go/Pion uses route netlink while gathering local WebRTC ICE candidates.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+MemoryMax=220M
+
+[Install]
+WantedBy=multi-user.target
