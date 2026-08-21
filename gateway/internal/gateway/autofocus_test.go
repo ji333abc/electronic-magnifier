@@ -1,0 +1,37 @@
+package gateway
+
+import (
+	"image"
+	"image/color"
+	"testing"
+)
+
+func TestTenengradScorePrefersDetailedImage(t *testing.T) {
+	flat := image.NewGray(image.Rect(0, 0, 128, 128))
+	detailed := image.NewGray(image.Rect(0, 0, 128, 128))
+	for y := 0; y < 128; y++ {
+		for x := 0; x < 128; x++ {
+			flat.SetGray(x, y, color.Gray{Y: 128})
+			if ((x / 8) + (y / 8))%2 == 0 {
+				detailed.SetGray(x, y, color.Gray{Y: 16})
+			} else {
+				detailed.SetGray(x, y, color.Gray{Y: 240})
+			}
+		}
+	}
+	flatScore := tenengradScore(flat)
+	detailedScore := tenengradScore(detailed)
+	if flatScore != 0 {
+		t.Fatalf("flat image score = %f, want 0", flatScore)
+	}
+	if detailedScore <= flatScore {
+		t.Fatalf("detailed image score = %f, flat score = %f", detailedScore, flatScore)
+	}
+}
+
+func TestFocusSampleRange(t *testing.T) {
+	minimum, maximum := focusSampleRange(map[int]float64{-2: 7, 0: 11, 2: 9})
+	if minimum != 7 || maximum != 11 {
+		t.Fatalf("focus sample range = (%f, %f), want (7, 11)", minimum, maximum)
+	}
+}

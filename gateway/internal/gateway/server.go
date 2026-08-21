@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -24,14 +25,15 @@ type streamHealth struct {
 }
 
 type publicStatus struct {
-	Gateway bool                    `json:"gateway"`
-	IPC     bool                    `json:"ipc"`
-	ESP     bool                    `json:"esp"`
-	Go2RTC  bool                    `json:"go2rtc"`
-	Streams map[string]streamHealth `json:"streams"`
-	Motors  []ESPMotorStatus        `json:"motors"`
-	Leases  map[int]string          `json:"leases"`
-	Updated time.Time               `json:"updated"`
+	Gateway   bool                    `json:"gateway"`
+	IPC       bool                    `json:"ipc"`
+	ESP       bool                    `json:"esp"`
+	Go2RTC    bool                    `json:"go2rtc"`
+	Streams   map[string]streamHealth `json:"streams"`
+	Motors    []ESPMotorStatus        `json:"motors"`
+	Leases    map[int]string          `json:"leases"`
+	AutoFocus autoFocusStatus         `json:"autoFocus"`
+	Updated   time.Time               `json:"updated"`
 }
 
 type healthCache struct {
@@ -45,6 +47,7 @@ type Server struct {
 	sessions       *sessionStore
 	esp            *espClient
 	hub            *controlHub
+	autoFocus      *autoFocusController
 	health         healthCache
 	http           *http.Server
 	proxy          *httputil.ReverseProxy
@@ -76,6 +79,7 @@ func NewServer(config Config, secrets Secrets) (*Server, error) {
 		motorIDs = append(motorIDs, motor.ID)
 	}
 	server.hub = newControlHub(esp, motorIDs)
+	server.autoFocus = newAutoFocusController(config, secrets, server.hub, esp)
 	server.proxy = httputil.NewSingleHostReverseProxy(target)
 	server.proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
 		http.Error(w, "视频网关暂时不可用", http.StatusBadGateway)
@@ -94,6 +98,7 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.autoFocus.Close()
 	s.hub.close()
 	return s.http.Shutdown(ctx)
 }
@@ -105,6 +110,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/config", s.requireSession(s.handleConfig))
 	mux.HandleFunc("GET /api/status", s.requireSession(s.handleStatus))
 	mux.HandleFunc("GET /api/snapshot", s.requireSession(s.handleSnapshot))
+	mux.HandleFunc("POST /api/autofocus", s.requireSession(s.handleAutoFocusStart))
+	mux.HandleFunc("DELETE /api/autofocus", s.requireSession(s.handleAutoFocusCancel))
 	mux.HandleFunc("GET /api/recordings", s.requireSession(s.handleRecordings))
 	mux.HandleFunc("GET /api/recordings/play", s.requireSession(s.handleRecordingPlayback))
 	mux.HandleFunc("GET /api/control", s.requireSession(s.handleControlWS))
@@ -161,7 +168,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request, _ string) 
 		"motors":  s.config.Motors,
 		"streams": map[string]string{"main": s.config.MainStream, "sub": s.config.SubStream},
 		"capabilities": map[string]bool{
-			"motorLimits": true, "motorPosition": true, "autoFocus": false,
+			"motorLimits": true, "motorPosition": true, "autoFocus": s.autoFocus.Status().Available,
 		},
 	})
 }
@@ -171,7 +178,37 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request, _ string) 
 	status := s.health.status
 	s.health.mu.RUnlock()
 	status.Leases = s.hub.leaseSnapshot()
+	status.AutoFocus = s.autoFocus.Status()
 	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleAutoFocusStart(w http.ResponseWriter, r *http.Request, user string) {
+	if !sameOrigin(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin_not_allowed"})
+		return
+	}
+	status, err := s.autoFocus.Start(user)
+	if errors.Is(err, errAutoFocusUnavailable) {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "autofocus_unavailable"})
+		return
+	}
+	if errors.Is(err, errAutoFocusBusy) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "focus_motor_busy"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "autofocus_failed"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, status)
+}
+
+func (s *Server) handleAutoFocusCancel(w http.ResponseWriter, r *http.Request, _ string) {
+	if !sameOrigin(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin_not_allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.autoFocus.Cancel())
 }
 
 func (s *Server) handleControlWS(w http.ResponseWriter, r *http.Request, user string) {

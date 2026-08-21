@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#061018">
   <title>监控摄像头控制台</title>
-  <link rel="stylesheet" href="/styles.css?v=3">
+  <link rel="stylesheet" href="/styles.css?v=4">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -59,7 +59,7 @@
       <p class="safety-note">按住方向键连续运动，松开立即停止。网页断开后系统会自动停机并释放控制权。</p>
       <div class="capability-panel">
         <div><strong>扩展能力</strong><small>前后端状态通道已预留</small></div>
-        <div class="capability-list"><span class="ready">限位输入</span><span class="ready">位置反馈</span><span>自动对焦 · 预留</span></div>
+        <div class="capability-list"><span class="ready">限位输入</span><span class="ready">位置反馈</span><span class="ready">自动精调</span></div>
       </div>
     </section>
 
@@ -104,6 +104,10 @@
         <button class="jog positive" type="button"><span></span><small>按住运动</small></button>
       </div>
       <div class="nudge-block"><span>微调步数</span><div class="nudge-row" aria-label="定步微调"></div></div>
+      <div class="autofocus-block" hidden>
+        <button class="autofocus-button" type="button"><span aria-hidden="true">◎</span><b>自动精调</b></button>
+        <div><strong class="autofocus-state">等待启动</strong><small>仅在当前位置附近小范围搜索</small></div>
+      </div>
       <details class="motor-advanced">
         <summary>高级设置 <span></span></summary>
         <div class="motor-settings">
@@ -114,6 +118,6 @@
       </details>
     </article>
   </template>
-  <script src="/app.js?v=3" defer></script>
+  <script src="/app.js?v=4" defer></script>
 </body>
 </html>

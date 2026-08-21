@@ -44,6 +44,7 @@ type motorLease struct {
 	until   time.Time
 	command MotorCommand
 	moving  bool
+	cancel  context.CancelFunc
 }
 
 type wsClient struct {
@@ -204,11 +205,13 @@ func (h *controlHub) handle(client *wsClient, message controlMessage) {
 			return
 		}
 	case "stop", "release":
+		// Cancel an automated owner before sending the physical stop so it cannot
+		// enqueue another movement after the operator's emergency command.
+		h.forceDropLease(message.Motor)
 		if err := h.send(command); err != nil {
 			h.deviceError(client, message, err)
 			return
 		}
-		h.forceDropLease(message.Motor)
 	}
 	_ = client.write(socketReply{Type: "ack", OK: true, Motor: message.Motor, CommandID: message.CommandID})
 	h.broadcastLeases()
@@ -248,11 +251,49 @@ func (h *controlHub) acquire(client *wsClient, command MotorCommand, duration ti
 	if existing, ok := h.leases[command.Motor]; ok && existing.ownerID != client.id && time.Now().Before(existing.until) {
 		return false
 	}
+	if existing, ok := h.leases[command.Motor]; ok && existing.cancel != nil {
+		existing.cancel()
+	}
 	h.leases[command.Motor] = motorLease{
 		ownerID: client.id, owner: client.user + "@" + client.id,
 		until: time.Now().Add(duration), command: command, moving: moving,
 	}
 	return true
+}
+
+func (h *controlHub) acquireSystem(motor int, ownerID, owner string, duration time.Duration, cancel context.CancelFunc) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.allowed[motor]; !ok {
+		return false
+	}
+	if existing, ok := h.leases[motor]; ok && time.Now().Before(existing.until) {
+		return false
+	}
+	if existing, ok := h.leases[motor]; ok && existing.cancel != nil {
+		existing.cancel()
+	}
+	h.leases[motor] = motorLease{
+		ownerID: ownerID, owner: owner, until: time.Now().Add(duration), moving: true,
+		cancel: cancel,
+	}
+	return true
+}
+
+func (h *controlHub) systemOwns(motor int, ownerID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	lease, ok := h.leases[motor]
+	return ok && lease.ownerID == ownerID && time.Now().Before(lease.until)
+}
+
+func (h *controlHub) releaseSystem(motor int, ownerID string) {
+	h.mu.Lock()
+	if lease, ok := h.leases[motor]; ok && lease.ownerID == ownerID {
+		delete(h.leases, motor)
+	}
+	h.mu.Unlock()
+	h.broadcastLeases()
 }
 
 func (h *controlHub) renew(motor int, ownerID string) (MotorCommand, bool) {
@@ -270,6 +311,9 @@ func (h *controlHub) renew(motor int, ownerID string) (MotorCommand, bool) {
 func (h *controlHub) dropLease(motor int, ownerID string) {
 	h.mu.Lock()
 	if lease, ok := h.leases[motor]; ok && lease.ownerID == ownerID {
+		if lease.cancel != nil {
+			lease.cancel()
+		}
 		delete(h.leases, motor)
 	}
 	h.mu.Unlock()
@@ -278,6 +322,9 @@ func (h *controlHub) dropLease(motor int, ownerID string) {
 
 func (h *controlHub) forceDropLease(motor int) {
 	h.mu.Lock()
+	if lease, ok := h.leases[motor]; ok && lease.cancel != nil {
+		lease.cancel()
+	}
 	delete(h.leases, motor)
 	h.mu.Unlock()
 }
@@ -289,6 +336,9 @@ func (h *controlHub) removeClient(client *wsClient) {
 	for motor, lease := range h.leases {
 		if lease.ownerID == client.id {
 			motors = append(motors, motor)
+			if lease.cancel != nil {
+				lease.cancel()
+			}
 			delete(h.leases, motor)
 		}
 	}
@@ -310,6 +360,9 @@ func (h *controlHub) watchLeases() {
 			for motor, lease := range h.leases {
 				if time.Now().After(lease.until) {
 					expired = append(expired, motor)
+					if lease.cancel != nil {
+						lease.cancel()
+					}
 					delete(h.leases, motor)
 				}
 			}
@@ -328,6 +381,11 @@ func (h *controlHub) watchLeases() {
 
 func (h *controlHub) releaseAll() {
 	h.mu.Lock()
+	for _, lease := range h.leases {
+		if lease.cancel != nil {
+			lease.cancel()
+		}
+	}
 	h.leases = make(map[int]motorLease)
 	h.mu.Unlock()
 	for _, motor := range h.motors {

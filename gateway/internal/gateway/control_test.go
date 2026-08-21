@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,23 @@ func TestValidateControlMessage(t *testing.T) {
 	}
 	if err := validateControlMessage(controlMessage{Motor: 3, Action: "stop"}, allowed); err == nil {
 		t.Fatal("unconfigured motor was accepted")
+	}
+}
+
+func TestSystemLeaseCancellation(t *testing.T) {
+	hub := &controlHub{motors: []int{1}, allowed: map[int]struct{}{1: {}}, leases: make(map[int]motorLease), clients: make(map[string]*wsClient)}
+	ctx, cancel := context.WithCancel(context.Background())
+	if !hub.acquireSystem(1, "autofocus", "自动精调@autofocus", time.Second, cancel) {
+		t.Fatal("system lease was not acquired")
+	}
+	if !hub.systemOwns(1, "autofocus") {
+		t.Fatal("system lease ownership was not recorded")
+	}
+	hub.forceDropLease(1)
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("dropping the system lease did not cancel its work")
 	}
 }
 

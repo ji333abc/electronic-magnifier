@@ -57,4 +57,7 @@ func TestLoginAndProtectedConfig(t *testing.T) {
 	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("motors")) {
 		t.Fatalf("authenticated config failed: %d %s", response.Code, response.Body.String())
 	}
+	if !bytes.Contains(response.Body.Bytes(), []byte(`"autoFocus":true`)) {
+		t.Fatalf("autofocus capability was not exposed: %s", response.Body.String())
+	}
 }

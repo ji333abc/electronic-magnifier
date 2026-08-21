@@ -3,7 +3,7 @@ const state = {
   activeJog: new Map(), stream: 'main', mainFailures: 0, reconnectDelay: 500,
   statusTimer: null, fpsTimer: null, measuredVideo: null,
   lastFrameCount: 0, lastFrameTime: 0,
-  recordingRequest: 0,
+  recordingRequest: 0, autoFocus: null, espOnline: false,
 };
 
 const elements = {
@@ -118,9 +118,15 @@ function renderMotors() {
       button.addEventListener('click', () => sendMove(motor.id, signedSteps < 0 ? 'ccw' : 'cw', Math.abs(signedSteps)));
       nudge.append(button);
     }
+    if (motor.role === 'focus') {
+      const autoFocusBlock = card.querySelector('.autofocus-block');
+      autoFocusBlock.hidden = false;
+      autoFocusBlock.querySelector('.autofocus-button').addEventListener('click', () => toggleAutoFocus(motor.id));
+    }
     elements.motorList.append(card);
     state.cards.set(motor.id, card);
   }
+  updateAutoFocusUI();
 }
 
 function motorSettings(motor) {
@@ -181,6 +187,47 @@ function sendMove(motor, direction, steps) {
   sendControl({ motor, action: 'move', direction, steps, commandId: newCommandId(), ...motorSettings(motor) });
 }
 
+async function toggleAutoFocus(motor) {
+  const active = state.autoFocus?.active && state.autoFocus.motor === motor;
+  const card = state.cards.get(motor);
+  const button = card?.querySelector('.autofocus-button');
+  if (button) button.disabled = true;
+  try {
+    if (active) {
+      state.autoFocus = await api('/api/autofocus', { method: 'DELETE' });
+      notify('正在取消自动精调…');
+    } else {
+      endJog(motor, true);
+      state.autoFocus = await api('/api/autofocus', { method: 'POST' });
+      notify('已开始自动精调，请保持画面稳定');
+    }
+  } catch (error) {
+    if (error.message !== 'authentication_required') {
+      notify(error.message === 'HTTP 409' ? '对焦电机正在使用中' : '无法启动自动精调');
+    }
+  } finally {
+    updateAutoFocusUI();
+  }
+}
+
+function updateAutoFocusUI() {
+  const focus = state.autoFocus;
+  for (const [motor, card] of state.cards) {
+    if (card.dataset.role !== 'focus') continue;
+    const block = card.querySelector('.autofocus-block');
+    const button = block?.querySelector('.autofocus-button');
+    const label = block?.querySelector('.autofocus-state');
+    if (!block || !button || !label) continue;
+    const active = Boolean(focus?.active && focus.motor === motor);
+    const available = state.config?.capabilities?.autoFocus !== false && focus?.available !== false;
+    card.classList.toggle('autofocus-running', active);
+    button.disabled = !available || (!active && !state.espOnline);
+    button.querySelector('b').textContent = active ? '取消精调' : '自动精调';
+    label.textContent = focus?.motor === motor ? focus.message : (available ? '等待启动' : '当前不可用');
+    card.querySelectorAll('.jog,.nudge-row button,.speed,.mode,.hold').forEach(control => { control.disabled = active; });
+  }
+}
+
 function stopEveryJog() {
   for (const motor of [...state.activeJog.keys()]) endJog(motor, true);
 }
@@ -236,19 +283,24 @@ function updateLeaseUI() {
   for (const [motor, card] of state.cards) {
     const owner = state.leases[motor];
     const mine = owner?.endsWith(`@${state.clientId}`);
-    const busy = Boolean(owner && !mine);
+    const autoFocusActive = Boolean(state.autoFocus?.active && state.autoFocus.motor === motor);
+    const busy = Boolean(owner && !mine && !autoFocusActive);
     card.classList.toggle('busy', busy);
     const status = card.querySelector('.motor-status');
     if (busy) status.textContent = '其他用户操作中';
+    else if (autoFocusActive) status.textContent = '自动精调中';
     else if (mine) status.textContent = '由你控制';
     else if (!status.dataset.running) status.textContent = '空闲';
   }
+  updateAutoFocusUI();
 }
 
 async function refreshStatus() {
   if (elements.app.hidden) return;
   try {
     const status = await api('/api/status');
+    state.espOnline = Boolean(status.esp);
+    state.autoFocus = status.autoFocus || state.autoFocus;
     for (const name of ['ipc', 'esp', 'go2rtc']) {
       const online = Boolean(status[name]);
       document.querySelector(`[data-health="${name}"]`)?.classList.toggle('online', online);
