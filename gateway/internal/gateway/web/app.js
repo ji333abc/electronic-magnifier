@@ -90,8 +90,11 @@ function renderMotors() {
   for (const motor of state.config.motors) {
     const card = elements.template.content.firstElementChild.cloneNode(true);
     card.dataset.motor = motor.id;
-    card.querySelector('.motor-index').textContent = `M${motor.id}`;
+    card.dataset.role = motor.role || 'motor';
+    card.querySelector('.motor-index').textContent = `MOTOR ${String(motor.id).padStart(2, '0')}`;
     card.querySelector('h3').textContent = motor.name;
+    card.querySelector('.min-limit b').textContent = motor.minLimitLabel || motor.negative || '反向限位';
+    card.querySelector('.max-limit b').textContent = motor.maxLimitLabel || motor.positive || '正向限位';
     const speed = card.querySelector('.speed');
     const speedValue = card.querySelector('.speed-value');
     speed.value = motor.defaultSpeed;
@@ -184,11 +187,13 @@ function stopEveryJog() {
 }
 
 document.querySelector('#stopAll').addEventListener('click', () => {
-  for (let motor = 1; motor <= 3; motor++) stopMotor(motor);
+  for (const motor of state.config?.motors || []) stopMotor(motor.id);
 });
 document.querySelector('#releaseAll').addEventListener('click', () => {
   stopEveryJog();
-  if (socketReady()) for (let motor = 1; motor <= 3; motor++) sendControl({ motor, action: 'release', commandId: newCommandId() });
+  if (socketReady()) {
+    for (const motor of state.config?.motors || []) sendControl({ motor: motor.id, action: 'release', commandId: newCommandId() });
+  }
 });
 
 function connectControl() {
@@ -246,7 +251,9 @@ async function refreshStatus() {
   try {
     const status = await api('/api/status');
     for (const name of ['ipc', 'esp', 'go2rtc']) {
-      document.querySelector(`[data-health="${name}"]`)?.classList.toggle('online', Boolean(status[name]));
+      const online = Boolean(status[name]);
+      document.querySelector(`[data-health="${name}"]`)?.classList.toggle('online', online);
+      document.querySelector(`[data-health-copy="${name}"]`)?.classList.toggle('online', online);
     }
     for (const motor of status.motors || []) {
       const card = state.cards.get(motor.motor);
@@ -256,6 +263,10 @@ async function refreshStatus() {
       label.classList.toggle('active', motor.running);
       if (motor.running) label.textContent = motor.continuous ? '连续运动' : `剩余 ${motor.remainingSteps} 步`;
       else if (!state.leases[motor.motor]) label.textContent = motor.coilsHeld ? '线圈保持' : '空闲';
+      card.querySelector('.min-limit')?.classList.toggle('triggered', Boolean(motor.minLimit));
+      card.querySelector('.max-limit')?.classList.toggle('triggered', Boolean(motor.maxLimit));
+      const position = card.querySelector('.position-state b');
+      if (position) position.textContent = motor.position === null || motor.position === undefined ? '--' : String(motor.position);
     }
     for (const card of state.cards.values()) card.classList.toggle('offline', !status.esp);
     if (state.stream === 'main' && status.go2rtc) {

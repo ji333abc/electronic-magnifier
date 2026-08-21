@@ -10,12 +10,15 @@ import (
 )
 
 type MotorConfig struct {
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
-	Negative     string `json:"negative"`
-	Positive     string `json:"positive"`
-	DefaultSpeed int    `json:"defaultSpeed"`
-	DefaultMode  string `json:"defaultMode"`
+	ID            int    `json:"id"`
+	Role          string `json:"role,omitempty"`
+	Name          string `json:"name"`
+	Negative      string `json:"negative"`
+	Positive      string `json:"positive"`
+	MinLimitLabel string `json:"minLimitLabel,omitempty"`
+	MaxLimitLabel string `json:"maxLimitLabel,omitempty"`
+	DefaultSpeed  int    `json:"defaultSpeed"`
+	DefaultMode   string `json:"defaultMode"`
 }
 
 type Config struct {
@@ -50,9 +53,8 @@ func LoadConfig(path string) (Config, Secrets, error) {
 		SubStream:    "ipc-sub",
 		SessionHours: 12,
 		Motors: []MotorConfig{
-			{ID: 1, Name: "对焦 A", Negative: "近焦", Positive: "远焦", DefaultSpeed: 120, DefaultMode: "half"},
-			{ID: 2, Name: "变焦", Negative: "广角", Positive: "长焦", DefaultSpeed: 200, DefaultMode: "full"},
-			{ID: 3, Name: "对焦 B", Negative: "近焦", Positive: "远焦", DefaultSpeed: 120, DefaultMode: "half"},
+			{ID: 1, Role: "focus", Name: "对焦", Negative: "近焦", Positive: "远焦", MinLimitLabel: "近端限位", MaxLimitLabel: "远端限位", DefaultSpeed: 120, DefaultMode: "half"},
+			{ID: 2, Role: "zoom", Name: "变焦", Negative: "广角", Positive: "长焦", MinLimitLabel: "广角限位", MaxLimitLabel: "长焦限位", DefaultSpeed: 200, DefaultMode: "full"},
 		},
 	}
 	if path != "" {
@@ -89,13 +91,13 @@ func validateConfig(config Config, secrets Secrets) error {
 	if config.SessionHours < 1 || config.SessionHours > 168 {
 		return errors.New("sessionHours must be between 1 and 168")
 	}
-	if len(config.Motors) != 3 {
-		return errors.New("exactly three motors must be configured")
+	if len(config.Motors) < 1 || len(config.Motors) > 8 {
+		return errors.New("between one and eight motors must be configured")
 	}
 	seen := map[int]bool{}
 	for _, motor := range config.Motors {
-		if motor.ID < 1 || motor.ID > 3 || seen[motor.ID] || strings.TrimSpace(motor.Name) == "" {
-			return errors.New("motors must have unique IDs 1, 2 and 3 and non-empty names")
+		if motor.ID < 1 || motor.ID > 8 || seen[motor.ID] || strings.TrimSpace(motor.Name) == "" {
+			return errors.New("motors must have unique IDs between 1 and 8 and non-empty names")
 		}
 		seen[motor.ID] = true
 		if motor.DefaultSpeed < 10 || motor.DefaultSpeed > 1000 {

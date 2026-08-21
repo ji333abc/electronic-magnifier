@@ -10,21 +10,25 @@ import (
 )
 
 func TestValidateControlMessage(t *testing.T) {
+	allowed := map[int]struct{}{1: {}, 2: {}}
 	valid := controlMessage{Motor: 1, Action: "move", Direction: "cw", Speed: 200, Mode: "half", Steps: 10}
-	if err := validateControlMessage(valid); err != nil {
+	if err := validateControlMessage(valid, allowed); err != nil {
 		t.Fatalf("valid command rejected: %v", err)
 	}
 	valid.Steps = 10001
-	if err := validateControlMessage(valid); err == nil {
+	if err := validateControlMessage(valid, allowed); err == nil {
 		t.Fatal("unsafe step count accepted")
 	}
-	if err := validateControlMessage(controlMessage{Motor: 2, Action: "stop"}); err != nil {
+	if err := validateControlMessage(controlMessage{Motor: 2, Action: "stop"}, allowed); err != nil {
 		t.Fatalf("emergency stop rejected: %v", err)
+	}
+	if err := validateControlMessage(controlMessage{Motor: 3, Action: "stop"}, allowed); err == nil {
+		t.Fatal("unconfigured motor was accepted")
 	}
 }
 
 func TestPerMotorLease(t *testing.T) {
-	hub := &controlHub{leases: make(map[int]motorLease), clients: make(map[string]*wsClient)}
+	hub := &controlHub{motors: []int{1, 2}, allowed: map[int]struct{}{1: {}, 2: {}}, leases: make(map[int]motorLease), clients: make(map[string]*wsClient)}
 	first := &wsClient{id: "one", user: "admin"}
 	second := &wsClient{id: "two", user: "admin"}
 	command := MotorCommand{Motor: 1, Action: "jog", Direction: "cw", Speed: 100, Mode: "half"}
@@ -51,7 +55,7 @@ func TestLeaseTimeoutStopsMotor(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	}))
 	defer espServer.Close()
-	hub := newControlHub(newESPClient(espServer.URL, "key"))
+	hub := newControlHub(newESPClient(espServer.URL, "key"), []int{1, 2})
 	defer hub.close()
 	client := &wsClient{id: "one", user: "admin"}
 	hub.acquire(client, MotorCommand{Motor: 1, Action: "jog"}, 80*time.Millisecond, false)

@@ -8,8 +8,7 @@
   "subStream": "ipc-sub",
   "sessionHours": 12,
   "motors": [
-    { "id": 1, "name": "对焦 A", "negative": "近焦", "positive": "远焦", "defaultSpeed": 120, "defaultMode": "half" },
-    { "id": 2, "name": "变焦", "negative": "广角", "positive": "长焦", "defaultSpeed": 200, "defaultMode": "full" },
-    { "id": 3, "name": "对焦 B", "negative": "近焦", "positive": "远焦", "defaultSpeed": 120, "defaultMode": "half" }
+    { "id": 1, "role": "focus", "name": "对焦", "negative": "近焦", "positive": "远焦", "minLimitLabel": "近端限位", "maxLimitLabel": "远端限位", "defaultSpeed": 120, "defaultMode": "half" },
+    { "id": 2, "role": "zoom", "name": "变焦", "negative": "广角", "positive": "长焦", "minLimitLabel": "广角限位", "maxLimitLabel": "长焦限位", "defaultSpeed": 200, "defaultMode": "full" }
   ]
 }

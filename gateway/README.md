@@ -1,6 +1,6 @@
 # 玩客云统一视频与镜头控制
 
-本目录包含一个面向 ARMv7 玩客云的轻量 Go 中控服务。它把 go2rtc 的低延迟 WebRTC 画面、IPC 快照和 ESP32-C3 三路步进电机控制合并到同一个需要登录的网页中。
+本目录包含一个面向 ARMv7 玩客云的轻量 Go 中控服务。它把 go2rtc 的低延迟 WebRTC 画面、IPC 快照和 ESP32-C3 镜头电机控制合并到同一个需要登录的响应式监控网页中。默认配置为对焦、变焦两路电机，控制和状态接口可扩展到 8 路，并已预留限位输入、位置反馈和自动对焦能力标识。
 
 ## 组件
 
@@ -28,21 +28,17 @@
 
 ESP32 的 Wi-Fi 密码与 API 密钥保存在已忽略的 `sdkconfig`，不再写进源码。
 
-## 3. 构建 ARMv7 中控
+## 3. 通过 GitHub Actions 构建 ARMv7 中控
 
-Windows 安装 Go 后，在 `gateway` 目录运行：
+本项目以 GitHub Actions 作为唯一构建验证环境。修改 `gateway/**` 或构建工作流后推送到 GitHub，`Build gateway ARMv7` 会自动执行：
 
-```powershell
-.\deploy\build-armv7.ps1
-```
+1. Go 单元测试。
+2. `go vet` 静态检查。
+3. Linux ARMv7 交叉编译。
+4. 生成原始二进制、`.tar.gz` 压缩包和 SHA-256 校验文件。
+5. 主分支构建成功后，以 `build-<运行序号>` 创建 GitHub 预发布版并上传上述文件。
 
-会生成 `lens-gateway-armv7`。也可在任意 Go 环境手动构建：
-
-```sh
-CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags='-s -w' -o lens-gateway-armv7 ./cmd/lens-gateway
-```
-
-也可以在 GitHub 仓库的 Actions 页面手动运行 `Build gateway ARMv7`。修改 `gateway/**` 后也会自动测试并构建；运行结束后下载 `lens-gateway-armv7-<提交哈希>` 构建产物，其中包含保留执行权限的 `.tar.gz` 和 SHA-256 校验文件。
+在仓库的 **Releases** 页面下载最新的 `lens-gateway-armv7.tar.gz` 和 `lens-gateway-armv7.sha256`。不需要在开发电脑上安装 Go 或执行本地交叉编译。
 
 ## 4. 安装到玩客云
 

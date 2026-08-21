@@ -13,9 +13,8 @@ func testConfig() Config {
 		PlaybackURL: "http://127.0.0.1:4",
 		MainStream:  "main", SubStream: "sub", SessionHours: 12,
 		Motors: []MotorConfig{
-			{ID: 1, Name: "A", DefaultSpeed: 100, DefaultMode: "half"},
-			{ID: 2, Name: "B", DefaultSpeed: 200, DefaultMode: "full"},
-			{ID: 3, Name: "C", DefaultSpeed: 100, DefaultMode: "half"},
+			{ID: 1, Role: "focus", Name: "A", DefaultSpeed: 100, DefaultMode: "half"},
+			{ID: 2, Role: "zoom", Name: "B", DefaultSpeed: 200, DefaultMode: "full"},
 		},
 	}
 }
@@ -34,7 +33,7 @@ func TestValidateConfig(t *testing.T) {
 	if err := validateConfig(config, testSecrets(t)); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
 	}
-	config.Motors[2].ID = 2
+	config.Motors[1].ID = 1
 	if err := validateConfig(config, testSecrets(t)); err == nil {
 		t.Fatal("duplicate motor ID was accepted")
 	}

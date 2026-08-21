@@ -71,7 +71,11 @@ func NewServer(config Config, secrets Secrets) (*Server, error) {
 		playbackURL:    playbackTarget,
 		playbackClient: &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 5 * time.Second}},
 	}
-	server.hub = newControlHub(esp)
+	motorIDs := make([]int, 0, len(config.Motors))
+	for _, motor := range config.Motors {
+		motorIDs = append(motorIDs, motor.ID)
+	}
+	server.hub = newControlHub(esp, motorIDs)
 	server.proxy = httputil.NewSingleHostReverseProxy(target)
 	server.proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
 		http.Error(w, "视频网关暂时不可用", http.StatusBadGateway)
@@ -156,6 +160,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request, _ string) 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"motors":  s.config.Motors,
 		"streams": map[string]string{"main": s.config.MainStream, "sub": s.config.SubStream},
+		"capabilities": map[string]bool{
+			"motorLimits": true, "motorPosition": true, "autoFocus": false,
+		},
 	})
 }
 

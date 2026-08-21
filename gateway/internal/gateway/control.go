@@ -69,14 +69,21 @@ func (c *wsClient) ping() error {
 type controlHub struct {
 	mu      sync.Mutex
 	esp     *espClient
+	motors  []int
+	allowed map[int]struct{}
 	leases  map[int]motorLease
 	clients map[string]*wsClient
 	stop    chan struct{}
 }
 
-func newControlHub(esp *espClient) *controlHub {
+func newControlHub(esp *espClient, motors []int) *controlHub {
+	allowed := make(map[int]struct{}, len(motors))
+	for _, motor := range motors {
+		allowed[motor] = struct{}{}
+	}
 	hub := &controlHub{
-		esp: esp, leases: make(map[int]motorLease), clients: make(map[string]*wsClient),
+		esp: esp, motors: append([]int(nil), motors...), allowed: allowed,
+		leases: make(map[int]motorLease), clients: make(map[string]*wsClient),
 		stop: make(chan struct{}),
 	}
 	go hub.watchLeases()
@@ -144,7 +151,7 @@ func (h *controlHub) serveWS(w http.ResponseWriter, r *http.Request, user string
 }
 
 func (h *controlHub) handle(client *wsClient, message controlMessage) {
-	if err := validateControlMessage(message); err != nil {
+	if err := validateControlMessage(message, h.allowed); err != nil {
 		_ = client.write(socketReply{Type: "error", OK: false, Code: "invalid_command", Message: err.Error(), Motor: message.Motor, CommandID: message.CommandID})
 		return
 	}
@@ -207,9 +214,9 @@ func (h *controlHub) handle(client *wsClient, message controlMessage) {
 	h.broadcastLeases()
 }
 
-func validateControlMessage(message controlMessage) error {
-	if message.Motor < 1 || message.Motor > 3 {
-		return fmt.Errorf("motor must be 1, 2 or 3")
+func validateControlMessage(message controlMessage, allowed map[int]struct{}) error {
+	if _, ok := allowed[message.Motor]; !ok {
+		return fmt.Errorf("motor is not configured")
 	}
 	switch message.Action {
 	case "jog", "move":
@@ -323,7 +330,7 @@ func (h *controlHub) releaseAll() {
 	h.mu.Lock()
 	h.leases = make(map[int]motorLease)
 	h.mu.Unlock()
-	for motor := 1; motor <= 3; motor++ {
+	for _, motor := range h.motors {
 		_ = h.send(MotorCommand{Motor: motor, Action: "release", CommandID: "gateway-shutdown"})
 	}
 }
