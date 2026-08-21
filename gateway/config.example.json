@@ -2,6 +2,7 @@
   "listen": "0.0.0.0:80",
   "espBaseUrl": "http://192.168.1.123",
   "ipcBaseUrl": "http://192.168.1.122",
+  "ipcSnapshotPath": "/webcapture.jpg?command=snap&channel=0",
   "go2rtcUrl": "http://127.0.0.1:1984",
   "playbackUrl": "http://127.0.0.1:9996",
   "mainStream": "ipc-main",

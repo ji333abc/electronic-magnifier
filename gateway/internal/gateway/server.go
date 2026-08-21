@@ -24,6 +24,23 @@ type streamHealth struct {
 	Online bool `json:"online"`
 }
 
+const streamStallTimeout = 5 * time.Second
+
+type go2rtcProducer struct {
+	ID        int64 `json:"id"`
+	BytesRecv int64 `json:"bytes_recv"`
+}
+
+type go2rtcStream struct {
+	Producers []go2rtcProducer `json:"producers"`
+}
+
+type streamActivity struct {
+	ProducerID   int64
+	BytesRecv    int64
+	LastProgress time.Time
+}
+
 type publicStatus struct {
 	Gateway   bool                    `json:"gateway"`
 	IPC       bool                    `json:"ipc"`
@@ -56,6 +73,8 @@ type Server struct {
 	playbackClient *http.Client
 	attemptMu      sync.Mutex
 	attempts       map[string][]time.Time
+	streamMu       sync.Mutex
+	streamActivity map[string]streamActivity
 }
 
 func NewServer(config Config, secrets Secrets) (*Server, error) {
@@ -73,6 +92,7 @@ func NewServer(config Config, secrets Secrets) (*Server, error) {
 		esp: esp, attempts: make(map[string][]time.Time), go2rtcURL: target,
 		playbackURL:    playbackTarget,
 		playbackClient: &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 5 * time.Second}},
+		streamActivity: make(map[string]streamActivity),
 	}
 	motorIDs := make([]int, 0, len(config.Motors))
 	for _, motor := range config.Motors {
@@ -216,7 +236,7 @@ func (s *Server) handleControlWS(w http.ResponseWriter, r *http.Request, user st
 }
 
 func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request, _ string) {
-	target := strings.TrimRight(s.config.IPCBaseURL, "/") + "/cgi-bin/snapshot.cgi?stream=2"
+	target := ipcSnapshotTarget(s.config)
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
 	if err != nil {
 		http.Error(w, "快照地址无效", http.StatusInternalServerError)
@@ -234,6 +254,10 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request, _ string
 	defer response.Body.Close()
 	if response.StatusCode/100 != 2 {
 		http.Error(w, "IPC 快照返回错误", http.StatusBadGateway)
+		return
+	}
+	if !strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "image/jpeg") {
+		http.Error(w, "IPC 快照格式错误", http.StatusBadGateway)
 		return
 	}
 	w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
@@ -309,22 +333,44 @@ func (s *Server) refreshHealth() {
 		defer response.Body.Close()
 		if response.StatusCode/100 == 2 {
 			status.Go2RTC = true
-			var streams map[string]struct {
-				Producers []json.RawMessage `json:"producers"`
-			}
+			var streams map[string]go2rtcStream
 			if json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&streams) == nil {
-				if stream, ok := streams[s.config.MainStream]; ok {
-					status.Streams["main"] = streamHealth{Online: len(stream.Producers) > 0}
-				}
-				if stream, ok := streams[s.config.SubStream]; ok {
-					status.Streams["sub"] = streamHealth{Online: len(stream.Producers) > 0}
-				}
+				status.Streams["main"] = s.observeStream("main", streams[s.config.MainStream], status.Updated)
+				status.Streams["sub"] = s.observeStream("sub", streams[s.config.SubStream], status.Updated)
 			}
 		}
 	}
 	s.health.mu.Lock()
 	s.health.status = status
 	s.health.mu.Unlock()
+}
+
+func (s *Server) observeStream(name string, stream go2rtcStream, now time.Time) streamHealth {
+	var active go2rtcProducer
+	for _, producer := range stream.Producers {
+		if producer.ID != 0 {
+			active = producer
+			break
+		}
+	}
+	s.streamMu.Lock()
+	defer s.streamMu.Unlock()
+	if active.ID == 0 {
+		delete(s.streamActivity, name)
+		return streamHealth{}
+	}
+	previous, exists := s.streamActivity[name]
+	if !exists || previous.ProducerID != active.ID || active.BytesRecv != previous.BytesRecv {
+		previous = streamActivity{ProducerID: active.ID, BytesRecv: active.BytesRecv, LastProgress: now}
+	} else {
+		previous.BytesRecv = active.BytesRecv
+	}
+	s.streamActivity[name] = previous
+	return streamHealth{Online: now.Sub(previous.LastProgress) <= streamStallTimeout}
+}
+
+func ipcSnapshotTarget(config Config) string {
+	return strings.TrimRight(config.IPCBaseURL, "/") + "/" + strings.TrimLeft(config.IPCSnapshotPath, "/")
 }
 
 func endpointHost(rawURL, defaultPort string) string {

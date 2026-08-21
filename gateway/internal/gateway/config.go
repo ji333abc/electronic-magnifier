@@ -22,15 +22,16 @@ type MotorConfig struct {
 }
 
 type Config struct {
-	Listen       string        `json:"listen"`
-	ESPBaseURL   string        `json:"espBaseUrl"`
-	IPCBaseURL   string        `json:"ipcBaseUrl"`
-	Go2RTCURL    string        `json:"go2rtcUrl"`
-	PlaybackURL  string        `json:"playbackUrl"`
-	MainStream   string        `json:"mainStream"`
-	SubStream    string        `json:"subStream"`
-	SessionHours int           `json:"sessionHours"`
-	Motors       []MotorConfig `json:"motors"`
+	Listen          string        `json:"listen"`
+	ESPBaseURL      string        `json:"espBaseUrl"`
+	IPCBaseURL      string        `json:"ipcBaseUrl"`
+	IPCSnapshotPath string        `json:"ipcSnapshotPath"`
+	Go2RTCURL       string        `json:"go2rtcUrl"`
+	PlaybackURL     string        `json:"playbackUrl"`
+	MainStream      string        `json:"mainStream"`
+	SubStream       string        `json:"subStream"`
+	SessionHours    int           `json:"sessionHours"`
+	Motors          []MotorConfig `json:"motors"`
 }
 
 type Secrets struct {
@@ -44,14 +45,15 @@ type Secrets struct {
 
 func LoadConfig(path string) (Config, Secrets, error) {
 	config := Config{
-		Listen:       "0.0.0.0:80",
-		ESPBaseURL:   "http://192.168.1.123",
-		IPCBaseURL:   "http://192.168.1.122",
-		Go2RTCURL:    "http://127.0.0.1:1984",
-		PlaybackURL:  "http://127.0.0.1:9996",
-		MainStream:   "ipc-main",
-		SubStream:    "ipc-sub",
-		SessionHours: 12,
+		Listen:          "0.0.0.0:80",
+		ESPBaseURL:      "http://192.168.1.123",
+		IPCBaseURL:      "http://192.168.1.122",
+		IPCSnapshotPath: "/webcapture.jpg?command=snap&channel=0",
+		Go2RTCURL:       "http://127.0.0.1:1984",
+		PlaybackURL:     "http://127.0.0.1:9996",
+		MainStream:      "ipc-main",
+		SubStream:       "ipc-sub",
+		SessionHours:    12,
 		Motors: []MotorConfig{
 			{ID: 1, Role: "focus", Name: "对焦", Negative: "近焦", Positive: "远焦", MinLimitLabel: "近端限位", MaxLimitLabel: "远端限位", DefaultSpeed: 120, DefaultMode: "half"},
 			{ID: 2, Role: "zoom", Name: "变焦", Negative: "广角", Positive: "长焦", MinLimitLabel: "广角限位", MaxLimitLabel: "长焦限位", DefaultSpeed: 200, DefaultMode: "full"},
@@ -82,8 +84,8 @@ func LoadConfig(path string) (Config, Secrets, error) {
 }
 
 func validateConfig(config Config, secrets Secrets) error {
-	if config.Listen == "" || config.ESPBaseURL == "" || config.IPCBaseURL == "" || config.Go2RTCURL == "" || config.PlaybackURL == "" {
-		return errors.New("listen and device base URLs are required")
+	if config.Listen == "" || config.ESPBaseURL == "" || config.IPCBaseURL == "" || config.IPCSnapshotPath == "" || config.Go2RTCURL == "" || config.PlaybackURL == "" {
+		return errors.New("listen, device URLs, and IPC snapshot path are required")
 	}
 	if config.MainStream == "" || config.SubStream == "" {
 		return errors.New("mainStream and subStream are required")

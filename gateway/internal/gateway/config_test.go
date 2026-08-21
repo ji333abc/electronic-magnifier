@@ -9,7 +9,8 @@ import (
 func testConfig() Config {
 	return Config{
 		Listen: "127.0.0.1:0", ESPBaseURL: "http://127.0.0.1:1",
-		IPCBaseURL: "http://127.0.0.1:2", Go2RTCURL: "http://127.0.0.1:3",
+		IPCBaseURL: "http://127.0.0.1:2", IPCSnapshotPath: "/webcapture.jpg?command=snap&channel=0",
+		Go2RTCURL: "http://127.0.0.1:3",
 		PlaybackURL: "http://127.0.0.1:4",
 		MainStream:  "main", SubStream: "sub", SessionHours: 12,
 		Motors: []MotorConfig{

@@ -1,10 +1,20 @@
 package gateway
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"testing"
 )
+
+func TestFocusErrorMessageClassifiesFailures(t *testing.T) {
+	if got := focusErrorMessage(errors.Join(errIPCSnapshot, errors.New("bad JPEG"))); got != "摄像头快照不可用，请检查摄像头电源、网线或地址" {
+		t.Fatalf("snapshot error message = %q", got)
+	}
+	if got := focusErrorMessage(errors.Join(errFocusMotor, errors.New("ESP offline"))); got != "镜头控制暂时不可用，已停止精调" {
+		t.Fatalf("motor error message = %q", got)
+	}
+}
 
 func TestTenengradScorePrefersDetailedImage(t *testing.T) {
 	flat := image.NewGray(image.Rect(0, 0, 128, 128))

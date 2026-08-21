@@ -8,9 +8,9 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"log"
 	"net/http"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -29,6 +29,8 @@ const (
 var (
 	errAutoFocusUnavailable = errors.New("autofocus is unavailable")
 	errAutoFocusBusy        = errors.New("focus motor is busy")
+	errIPCSnapshot          = errors.New("IPC snapshot is unavailable")
+	errFocusMotor           = errors.New("focus motor control is unavailable")
 )
 
 type autoFocusStatus struct {
@@ -68,7 +70,7 @@ func newAutoFocusController(config Config, secrets Secrets, hub *controlHub, esp
 		Motor:     controller.motor.ID,
 	}
 	client := &http.Client{Timeout: 4 * time.Second}
-	target := strings.TrimRight(config.IPCBaseURL, "/") + "/cgi-bin/snapshot.cgi?stream=2"
+	target := ipcSnapshotTarget(config)
 	controller.snapshot = func(ctx context.Context) (image.Image, error) {
 		return fetchIPCSnapshot(ctx, client, target, secrets.IPCUser, secrets.IPCPassword)
 	}
@@ -136,6 +138,11 @@ func (a *autoFocusController) run(ctx context.Context) {
 	finalState := "failed"
 	finalMessage := "自动精调失败"
 	finalScore := 0.0
+	var finalError error
+	fail := func(err error) {
+		finalError = err
+		finalMessage = focusErrorMessage(err)
+	}
 	defer func() {
 		if a.hub.systemOwns(a.motor.ID, autoFocusOwnerID) {
 			stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -151,13 +158,16 @@ func (a *autoFocusController) run(ctx context.Context) {
 				finalMessage = "自动精调已取消"
 			}
 		}
+		if finalError != nil && !errors.Is(finalError, context.Canceled) {
+			log.Printf("autofocus stopped: %v", finalError)
+		}
 		a.finish(finalState, finalMessage, current, finalScore)
 	}()
 
 	samples := make(map[int]float64)
 	initial, err := a.captureScore(ctx)
 	if err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	samples[0] = initial
@@ -165,23 +175,23 @@ func (a *autoFocusController) run(ctx context.Context) {
 	a.progress("正在判断清晰方向…", current, initial)
 
 	if err := a.moveTo(ctx, &current, autoFocusCoarseStep); err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	positive, err := a.captureScore(ctx)
 	if err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	samples[current] = positive
 
 	if err := a.moveTo(ctx, &current, -autoFocusCoarseStep); err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	negative, err := a.captureScore(ctx)
 	if err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	samples[current] = negative
@@ -200,19 +210,19 @@ func (a *autoFocusController) run(ctx context.Context) {
 
 	if bestOffset != 0 {
 		if err := a.moveTo(ctx, &current, bestOffset); err != nil {
-			finalMessage = focusErrorMessage(err)
+			fail(err)
 			return
 		}
 		declines := 0
 		for next := bestOffset + direction*autoFocusCoarseStep; absInt(next) <= autoFocusMaxOffset; next += direction * autoFocusCoarseStep {
 			a.progress("正在进行粗略搜索…", current, bestScore)
 			if err := a.moveTo(ctx, &current, next); err != nil {
-				finalMessage = focusErrorMessage(err)
+				fail(err)
 				return
 			}
 			score, captureErr := a.captureScore(ctx)
 			if captureErr != nil {
-				finalMessage = focusErrorMessage(captureErr)
+				fail(captureErr)
 				return
 			}
 			samples[current] = score
@@ -238,19 +248,19 @@ func (a *autoFocusController) run(ctx context.Context) {
 	fineMax := minInt(autoFocusMaxOffset, bestOffset+autoFocusCoarseStep)
 	a.progress("正在进行精细搜索…", current, bestScore)
 	if err := a.moveTo(ctx, &current, fineMin); err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	for offset := fineMin; offset <= fineMax; offset += autoFocusFineStep {
 		if current != offset {
 			if err := a.moveTo(ctx, &current, offset); err != nil {
-				finalMessage = focusErrorMessage(err)
+				fail(err)
 				return
 			}
 		}
 		score, captureErr := a.captureScore(ctx)
 		if captureErr != nil {
-			finalMessage = focusErrorMessage(captureErr)
+			fail(captureErr)
 			return
 		}
 		samples[current] = score
@@ -268,11 +278,11 @@ func (a *autoFocusController) run(ctx context.Context) {
 
 	approach := maxInt(-autoFocusMaxOffset, bestOffset-2*autoFocusFineStep)
 	if err := a.moveTo(ctx, &current, approach); err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	if err := a.moveTo(ctx, &current, bestOffset); err != nil {
-		finalMessage = focusErrorMessage(err)
+		fail(err)
 		return
 	}
 	finalState = "succeeded"
@@ -299,7 +309,7 @@ func (a *autoFocusController) moveTo(ctx context.Context, current *int, target i
 		CommandID: fmt.Sprintf("autofocus-%d", time.Now().UnixMilli()),
 	}
 	if err := a.esp.command(ctx, command); err != nil {
-		return fmt.Errorf("move focus motor: %w", err)
+		return errors.Join(errFocusMotor, fmt.Errorf("move focus motor: %w", err))
 	}
 	moveDeadline := time.NewTimer(time.Duration(float64(delta)/float64(command.Speed)*float64(time.Second)) + 1500*time.Millisecond)
 	defer moveDeadline.Stop()
@@ -310,11 +320,11 @@ func (a *autoFocusController) moveTo(ctx context.Context, current *int, target i
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-moveDeadline.C:
-			return errors.New("focus motor movement timed out")
+			return errors.Join(errFocusMotor, errors.New("focus motor movement timed out"))
 		case <-ticker.C:
 			status, err := a.esp.status(ctx)
 			if err != nil {
-				return fmt.Errorf("read focus motor status: %w", err)
+				return errors.Join(errFocusMotor, fmt.Errorf("read focus motor status: %w", err))
 			}
 			for _, motor := range status.Motors {
 				if motor.Motor == a.motor.ID && !motor.Running && motor.RemainingSteps == 0 {
@@ -334,7 +344,7 @@ func (a *autoFocusController) captureScore(ctx context.Context) (float64, error)
 	for i := 0; i < autoFocusFrameSamples; i++ {
 		frame, err := a.snapshot(ctx)
 		if err != nil {
-			return 0, fmt.Errorf("capture IPC snapshot: %w", err)
+			return 0, errors.Join(errIPCSnapshot, fmt.Errorf("capture IPC snapshot: %w", err))
 		}
 		scores = append(scores, tenengradScore(frame))
 	}
@@ -497,6 +507,12 @@ func sleepContext(ctx context.Context, duration time.Duration) error {
 func focusErrorMessage(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return "自动精调已取消"
+	}
+	if errors.Is(err, errIPCSnapshot) {
+		return "摄像头快照不可用，请检查摄像头电源、网线或地址"
+	}
+	if errors.Is(err, errFocusMotor) {
+		return "镜头控制暂时不可用，已停止精调"
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "自动精调超时，已停止电机"
