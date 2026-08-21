@@ -24,8 +24,9 @@ const (
 	autoFocusCorrection   = 3
 	autoFocusMaxOffset    = 64
 	autoFocusFrameSamples = 3
-	autoFocusSettleTime   = 250 * time.Millisecond
-	autoFocusTimeout      = 30 * time.Second
+	autoFocusSettleTime   = 500 * time.Millisecond
+	autoFocusFrameGap     = 80 * time.Millisecond
+	autoFocusTimeout      = 40 * time.Second
 	maxSnapshotBytes      = 5 << 20
 )
 
@@ -392,6 +393,11 @@ func (a *autoFocusController) captureScore(ctx context.Context) (float64, error)
 			return 0, errors.Join(errIPCSnapshot, fmt.Errorf("capture IPC snapshot: %w", err))
 		}
 		scores = append(scores, tenengradScore(frame))
+		if i+1 < autoFocusFrameSamples {
+			if err := sleepContext(ctx, autoFocusFrameGap); err != nil {
+				return 0, err
+			}
+		}
 	}
 	sort.Float64s(scores)
 	return scores[len(scores)/2], nil
