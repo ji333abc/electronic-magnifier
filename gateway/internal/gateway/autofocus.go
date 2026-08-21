@@ -18,11 +18,14 @@ import (
 const (
 	autoFocusOwnerID      = "autofocus"
 	autoFocusCoarseStep   = 8
-	autoFocusFineStep     = 2
+	autoFocusFineStep     = 1
+	autoFocusFineRadius   = 5
+	autoFocusApproachStep = 6
+	autoFocusCorrection   = 3
 	autoFocusMaxOffset    = 64
 	autoFocusFrameSamples = 3
 	autoFocusSettleTime   = 250 * time.Millisecond
-	autoFocusTimeout      = 25 * time.Second
+	autoFocusTimeout      = 30 * time.Second
 	maxSnapshotBytes      = 5 << 20
 )
 
@@ -244,8 +247,8 @@ func (a *autoFocusController) run(ctx context.Context) {
 		return
 	}
 
-	fineMin := maxInt(-autoFocusMaxOffset, bestOffset-autoFocusCoarseStep)
-	fineMax := minInt(autoFocusMaxOffset, bestOffset+autoFocusCoarseStep)
+	fineMin := maxInt(-autoFocusMaxOffset, bestOffset-autoFocusFineRadius)
+	fineMax := minInt(autoFocusMaxOffset, bestOffset+autoFocusFineRadius)
 	a.progress("正在进行精细搜索…", current, bestScore)
 	if err := a.moveTo(ctx, &current, fineMin); err != nil {
 		fail(err)
@@ -276,7 +279,7 @@ func (a *autoFocusController) run(ctx context.Context) {
 		return
 	}
 
-	approach := maxInt(-autoFocusMaxOffset, bestOffset-2*autoFocusFineStep)
+	approach := maxInt(-autoFocusMaxOffset, bestOffset-autoFocusApproachStep)
 	if err := a.moveTo(ctx, &current, approach); err != nil {
 		fail(err)
 		return
@@ -285,9 +288,51 @@ func (a *autoFocusController) run(ctx context.Context) {
 		fail(err)
 		return
 	}
+	landedScore, err := a.captureScore(ctx)
+	if err != nil {
+		fail(err)
+		return
+	}
+	finalScore = landedScore
+	if focusScoreDropped(bestScore, landedScore) {
+		a.progress("正在校正最终落点…", current, landedScore)
+		correctedOffset, correctedScore := bestOffset, landedScore
+		correctionMax := minInt(autoFocusMaxOffset, bestOffset+autoFocusCorrection)
+		for offset := bestOffset + 1; offset <= correctionMax; offset++ {
+			if err := a.moveTo(ctx, &current, offset); err != nil {
+				fail(err)
+				return
+			}
+			score, captureErr := a.captureScore(ctx)
+			if captureErr != nil {
+				fail(captureErr)
+				return
+			}
+			if score > correctedScore {
+				correctedOffset, correctedScore = offset, score
+			}
+		}
+		if current != correctedOffset {
+			approach = maxInt(-autoFocusMaxOffset, correctedOffset-autoFocusApproachStep)
+			if err := a.moveTo(ctx, &current, approach); err != nil {
+				fail(err)
+				return
+			}
+			if err := a.moveTo(ctx, &current, correctedOffset); err != nil {
+				fail(err)
+				return
+			}
+			verifiedScore, captureErr := a.captureScore(ctx)
+			if captureErr != nil {
+				fail(captureErr)
+				return
+			}
+			correctedScore = verifiedScore
+		}
+		bestOffset, finalScore = correctedOffset, correctedScore
+	}
 	finalState = "succeeded"
 	finalMessage = "自动精调完成"
-	finalScore = bestScore
 }
 
 func (a *autoFocusController) moveTo(ctx context.Context, current *int, target int) error {
@@ -491,6 +536,10 @@ func focusSampleRange(samples map[int]float64) (float64, float64) {
 		first = false
 	}
 	return minimum, maximum
+}
+
+func focusScoreDropped(reference, actual float64) bool {
+	return reference > 0 && actual < reference*0.98
 }
 
 func sleepContext(ctx context.Context, duration time.Duration) error {

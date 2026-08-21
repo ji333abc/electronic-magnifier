@@ -45,3 +45,12 @@ func TestFocusSampleRange(t *testing.T) {
 		t.Fatalf("focus sample range = (%f, %f), want (7, 11)", minimum, maximum)
 	}
 }
+
+func TestFocusScoreDropped(t *testing.T) {
+	if focusScoreDropped(100, 99) {
+		t.Fatal("one percent score variation triggered correction")
+	}
+	if !focusScoreDropped(100, 97) {
+		t.Fatal("three percent score loss did not trigger correction")
+	}
+}
