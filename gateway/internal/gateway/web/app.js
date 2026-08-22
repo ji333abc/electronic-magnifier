@@ -1,8 +1,15 @@
+const VIDEO_STALL_WARNING_MS = 3000;
+const VIDEO_STALL_RECOVERY_MS = 8000;
+const VIDEO_START_RECOVERY_MS = 12000;
+const VIDEO_RECOVERY_COOLDOWN_MS = 8000;
+const VIDEO_STABLE_RESET_MS = 30000;
+
 const state = {
   config: null, socket: null, clientId: '', leases: {}, cards: new Map(),
   activeJog: new Map(), stream: 'main', mainFailures: 0, reconnectDelay: 500,
   statusTimer: null, fpsTimer: null, measuredVideo: null,
-  lastFrameCount: 0, lastFrameTime: 0,
+  lastFrameCount: 0, lastFrameTime: 0, lastFrameAdvanceTime: 0, streamStartedAt: 0,
+  lastVideoRecoveryTime: 0, videoRecoveryCount: 0, videoStableSince: 0,
   recordingRequest: 0, autoFocus: null, espOnline: false,
 };
 
@@ -11,6 +18,7 @@ const elements = {
   loginForm: document.querySelector('#loginForm'), loginError: document.querySelector('#loginError'),
   motorList: document.querySelector('#motorList'), template: document.querySelector('#motorTemplate'),
   videoFrame: document.querySelector('#videoFrame'), placeholder: document.querySelector('#videoPlaceholder'),
+  placeholderText: document.querySelector('#videoPlaceholderText'),
   videoNote: document.querySelector('#videoNote'),
   videoStats: document.querySelector('#videoStats'),
   videoShell: document.querySelector('.video-shell'), controlFullscreen: document.querySelector('#controlFullscreen'),
@@ -311,6 +319,7 @@ async function exitControlFullscreen() {
 }
 
 function handleFullscreenChange() {
+  state.lastFrameAdvanceTime = performance.now();
   if (!controlFullscreenActive()) {
     stopEveryJog();
     elements.videoShell.classList.remove('fullscreen-fallback');
@@ -427,57 +436,119 @@ async function refreshStatus() {
 
 function switchStream(kind) {
   if (!state.config) return;
-  state.stream = kind;
-  state.mainFailures = 0;
-  elements.placeholder.classList.remove('hidden');
-  resetVideoStats();
-  const source = encodeURIComponent(state.config.streams[kind]);
-  elements.videoFrame.src = `/stream/stream.html?src=${source}&mode=webrtc&media=video`;
+  state.videoRecoveryCount = 0;
+  state.lastVideoRecoveryTime = 0;
+  loadVideoStream(kind);
 }
 
-function decodedFrameCount(video) {
+function loadVideoStream(kind) {
+  state.stream = kind;
+  state.mainFailures = 0;
+  resetVideoStats('正在建立视频连接…');
+  const source = encodeURIComponent(state.config.streams[kind]);
+  elements.videoFrame.src = `/stream/stream.html?src=${source}&mode=webrtc&media=video&_=${Date.now()}`;
+}
+
+function videoFrameSample(video) {
   const quality = video.getVideoPlaybackQuality?.();
-  if (Number.isFinite(quality?.totalVideoFrames)) return quality.totalVideoFrames;
-  if (Number.isFinite(video.webkitDecodedFrameCount)) return video.webkitDecodedFrameCount;
+  if (Number.isFinite(quality?.totalVideoFrames)) return { value: quality.totalVideoFrames, countsFrames: true };
+  if (Number.isFinite(video.webkitDecodedFrameCount)) return { value: video.webkitDecodedFrameCount, countsFrames: true };
+  if (Number.isFinite(video.currentTime)) return { value: video.currentTime, countsFrames: false };
   return null;
 }
 
-function resetVideoStats() {
+function showVideoPlaceholder(message) {
+  elements.placeholderText.textContent = message;
+  elements.placeholder.classList.remove('hidden');
+}
+
+function resetVideoStats(message = '正在等待视频帧…') {
+  const now = performance.now();
   state.measuredVideo = null;
   state.lastFrameCount = 0;
   state.lastFrameTime = 0;
+  state.lastFrameAdvanceTime = now;
+  state.streamStartedAt = now;
+  state.videoStableSince = 0;
   elements.videoStats.textContent = '等待视频帧…';
+  showVideoPlaceholder(message);
+}
+
+function markVideoHealthy(now) {
+  elements.placeholder.classList.add('hidden');
+  elements.placeholderText.textContent = '正在建立视频连接…';
+  if (!state.videoStableSince) state.videoStableSince = now;
+  if (now - state.videoStableSince >= VIDEO_STABLE_RESET_MS) state.videoRecoveryCount = 0;
+}
+
+function recoverVideo(reason) {
+  const now = performance.now();
+  if (document.hidden || now - state.lastVideoRecoveryTime < VIDEO_RECOVERY_COOLDOWN_MS) return;
+  state.lastVideoRecoveryTime = now;
+  state.videoRecoveryCount += 1;
+  showVideoPlaceholder('画面卡住，正在重新连接…');
+  elements.videoStats.textContent = reason;
+  if (state.stream === 'main' && state.videoRecoveryCount >= 2 && state.config?.streams?.sub) {
+    notify('画面持续卡顿，正在尝试备用连接');
+    switchStream('sub');
+    return;
+  }
+  notify('检测到画面卡住，正在重新连接');
+  loadVideoStream(state.stream);
 }
 
 function updateVideoStats() {
+  if (document.hidden || elements.app.hidden || !state.streamStartedAt) return;
   let video = null;
   try {
     video = elements.videoFrame.contentDocument?.querySelector('video');
   } catch (_) {}
 
-  const frameCount = video ? decodedFrameCount(video) : null;
-  if (!video || frameCount === null || video.readyState < 2) {
-    resetVideoStats();
+  const now = performance.now();
+  const sample = video ? videoFrameSample(video) : null;
+  if (!video || sample === null || video.readyState < 2) {
+    elements.videoStats.textContent = '等待视频帧…';
+    if (now - state.streamStartedAt >= VIDEO_START_RECOVERY_MS) recoverVideo('视频连接超时');
     return;
   }
 
-  const now = performance.now();
-  if (state.measuredVideo !== video || state.lastFrameTime === 0 || frameCount < state.lastFrameCount) {
+  if (video.paused) video.play().catch(() => {});
+  if (state.measuredVideo !== video || state.lastFrameTime === 0 || sample.value < state.lastFrameCount) {
     state.measuredVideo = video;
-    state.lastFrameCount = frameCount;
+    state.lastFrameCount = sample.value;
     state.lastFrameTime = now;
+    state.lastFrameAdvanceTime = sample.value > 0 ? now : state.streamStartedAt;
+    if (sample.value > 0) markVideoHealthy(now);
     return;
   }
 
   const elapsed = (now - state.lastFrameTime) / 1000;
-  const fps = elapsed > 0 ? (frameCount - state.lastFrameCount) / elapsed : 0;
   const resolution = video.videoWidth && video.videoHeight ? `${video.videoWidth}×${video.videoHeight} · ` : '';
-  elements.videoStats.textContent = `${resolution}${fps.toFixed(1)} FPS`;
-  state.lastFrameCount = frameCount;
+  const advanced = sample.value > state.lastFrameCount + (sample.countsFrames ? 0 : 0.001);
+  if (advanced) {
+    const fps = sample.countsFrames && elapsed > 0 ? (sample.value - state.lastFrameCount) / elapsed : null;
+    state.lastFrameAdvanceTime = now;
+    markVideoHealthy(now);
+    elements.videoStats.textContent = fps === null ? `${resolution}播放中` : `${resolution}${fps.toFixed(1)} FPS`;
+  } else {
+    state.videoStableSince = 0;
+    const stalledFor = now - state.lastFrameAdvanceTime;
+    if (stalledFor >= VIDEO_STALL_WARNING_MS) {
+      const seconds = (stalledFor / 1000).toFixed(0);
+      elements.videoStats.textContent = `${resolution}画面停顿 ${seconds} 秒`;
+      showVideoPlaceholder(`画面停顿 ${seconds} 秒，正在检测…`);
+    }
+    if (stalledFor >= VIDEO_STALL_RECOVERY_MS) recoverVideo('画面长时间未更新');
+  }
+  state.lastFrameCount = sample.value;
   state.lastFrameTime = now;
 }
 
-elements.videoFrame.addEventListener('load', () => setTimeout(() => elements.placeholder.classList.add('hidden'), 700));
+elements.videoFrame.addEventListener('load', () => {
+  state.streamStartedAt = performance.now();
+  state.lastFrameAdvanceTime = state.streamStartedAt;
+  showVideoPlaceholder('正在等待视频帧…');
+});
 document.querySelectorAll('.fullscreen-jog').forEach(bindFullscreenJog);
 elements.controlFullscreen.addEventListener('click', enterControlFullscreen);
 elements.exitControlFullscreen.addEventListener('click', exitControlFullscreen);
@@ -579,6 +650,9 @@ function notify(message) {
   notify.timer = setTimeout(() => elements.toast.classList.remove('show'), 2600);
 }
 
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopEveryJog(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopEveryJog();
+  else if (!elements.app.hidden) resetVideoStats('正在恢复视频…');
+});
 window.addEventListener('pagehide', stopEveryJog);
 startApp();

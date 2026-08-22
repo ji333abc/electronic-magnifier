@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#061018">
   <title>监控摄像头控制台</title>
-  <link rel="stylesheet" href="/styles.css?v=6">
+  <link rel="stylesheet" href="/styles.css?v=7">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -32,7 +32,7 @@
         <div><p class="eyebrow"><span></span>LIVE MONITOR</p><h1>实时监控</h1><p class="section-subtitle">低延迟镜头画面</p></div>
       </div>
       <div class="video-shell">
-        <div class="video-placeholder" id="videoPlaceholder"><span class="loader"></span><p>正在建立视频连接…</p></div>
+        <div class="video-placeholder" id="videoPlaceholder"><span class="loader"></span><p id="videoPlaceholderText">正在建立视频连接…</p></div>
         <iframe id="videoFrame" title="IPC 实时视频" allow="autoplay; fullscreen" allowfullscreen webkitallowfullscreen referrerpolicy="same-origin"></iframe>
         <button class="fullscreen-launch" id="controlFullscreen" type="button" aria-label="进入镜头控制全屏" title="镜头控制全屏">⛶</button>
         <button class="fullscreen-exit" id="exitControlFullscreen" type="button" aria-label="退出全屏">×</button>
@@ -122,6 +122,6 @@
       </details>
     </article>
   </template>
-  <script src="/app.js?v=6" defer></script>
+  <script src="/app.js?v=7" defer></script>
 </body>
 </html>
