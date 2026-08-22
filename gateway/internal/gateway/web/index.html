@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#061018">
   <title>监控摄像头控制台</title>
-  <link rel="stylesheet" href="/styles.css?v=5">
+  <link rel="stylesheet" href="/styles.css?v=6">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -34,6 +34,15 @@
       <div class="video-shell">
         <div class="video-placeholder" id="videoPlaceholder"><span class="loader"></span><p>正在建立视频连接…</p></div>
         <iframe id="videoFrame" title="IPC 实时视频" allow="autoplay; fullscreen" allowfullscreen webkitallowfullscreen referrerpolicy="same-origin"></iframe>
+        <button class="fullscreen-launch" id="controlFullscreen" type="button" aria-label="进入镜头控制全屏" title="镜头控制全屏">⛶</button>
+        <button class="fullscreen-exit" id="exitControlFullscreen" type="button" aria-label="退出全屏">×</button>
+        <div class="fullscreen-optics" id="fullscreenOptics" role="group" aria-label="全屏镜头控制">
+          <button class="fullscreen-jog" type="button" data-role="focus" data-direction="ccw"><b>焦−</b><small>近焦</small></button>
+          <button class="fullscreen-jog" type="button" data-role="focus" data-direction="cw"><b>焦＋</b><small>远焦</small></button>
+          <button class="fullscreen-jog" type="button" data-role="zoom" data-direction="ccw"><b>变−</b><small>广角</small></button>
+          <button class="fullscreen-jog" type="button" data-role="zoom" data-direction="cw"><b>变＋</b><small>长焦</small></button>
+          <button class="fullscreen-autofocus" id="fullscreenAutofocus" type="button" aria-label="启动自动精调"><b>◎</b><small>自动</small></button>
+        </div>
       </div>
       <div class="viewer-footer"><span id="videoNote">WebRTC · H.264 · 无音频</span><span id="videoStats">等待视频帧…</span></div>
     </section>
@@ -113,6 +122,6 @@
       </details>
     </article>
   </template>
-  <script src="/app.js?v=5" defer></script>
+  <script src="/app.js?v=6" defer></script>
 </body>
 </html>

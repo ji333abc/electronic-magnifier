@@ -13,6 +13,8 @@ const elements = {
   videoFrame: document.querySelector('#videoFrame'), placeholder: document.querySelector('#videoPlaceholder'),
   videoNote: document.querySelector('#videoNote'),
   videoStats: document.querySelector('#videoStats'),
+  videoShell: document.querySelector('.video-shell'), controlFullscreen: document.querySelector('#controlFullscreen'),
+  exitControlFullscreen: document.querySelector('#exitControlFullscreen'), fullscreenAutofocus: document.querySelector('#fullscreenAutofocus'),
   socketState: document.querySelector('#socketState'), toast: document.querySelector('#toast'),
   recordingDate: document.querySelector('#recordingDate'), recordingList: document.querySelector('#recordingList'),
   recordingSummary: document.querySelector('#recordingSummary'), recordingPlayer: document.querySelector('#recordingPlayer'),
@@ -30,6 +32,7 @@ async function api(path, options = {}) {
 }
 
 function showLogin() {
+  if (controlFullscreenActive()) exitControlFullscreen();
   elements.loginLayer.classList.remove('hidden');
   elements.app.hidden = true;
   state.socket?.close();
@@ -126,7 +129,24 @@ function renderMotors() {
     elements.motorList.append(card);
     state.cards.set(motor.id, card);
   }
+  updateFullscreenControlLabels();
   updateAutoFocusUI();
+}
+
+function motorByRole(role) {
+  return state.config?.motors.find(motor => motor.role === role);
+}
+
+function updateFullscreenControlLabels() {
+  for (const button of document.querySelectorAll('.fullscreen-jog')) {
+    const motor = motorByRole(button.dataset.role);
+    const direction = button.dataset.direction;
+    const label = direction === 'ccw' ? motor?.negative : motor?.positive;
+    const fallback = button.dataset.role === 'focus' ? (direction === 'ccw' ? '近焦' : '远焦') : (direction === 'ccw' ? '广角' : '长焦');
+    button.querySelector('small').textContent = label || fallback;
+    button.disabled = !motor;
+    button.setAttribute('aria-label', `${motor?.name || (button.dataset.role === 'focus' ? '对焦' : '变焦')} ${label || fallback}，按住运动`);
+  }
 }
 
 function motorSettings(motor) {
@@ -187,6 +207,30 @@ function sendMove(motor, direction, steps) {
   sendControl({ motor, action: 'move', direction, steps, commandId: newCommandId(), ...motorSettings(motor) });
 }
 
+function bindFullscreenJog(button) {
+  const begin = event => {
+    if (event.button !== undefined && event.button !== 0) return;
+    event.preventDefault();
+    const motor = motorByRole(button.dataset.role);
+    if (!motor) return notify('当前没有对应的镜头电机');
+    button.setPointerCapture?.(event.pointerId);
+    startJog(motor.id, button.dataset.direction, button);
+  };
+  const end = event => {
+    event.preventDefault();
+    const motor = motorByRole(button.dataset.role);
+    if (motor) endJog(motor.id, true);
+  };
+  button.addEventListener('pointerdown', begin);
+  button.addEventListener('pointerup', end);
+  button.addEventListener('pointercancel', end);
+  button.addEventListener('lostpointercapture', () => {
+    const motor = motorByRole(button.dataset.role);
+    if (motor) endJog(motor.id, true);
+  });
+  button.addEventListener('contextmenu', event => event.preventDefault());
+}
+
 async function toggleAutoFocus(motor) {
   const active = state.autoFocus?.active && state.autoFocus.motor === motor;
   const card = state.cards.get(motor);
@@ -225,6 +269,52 @@ function updateAutoFocusUI() {
     button.querySelector('b').textContent = active ? '取消精调' : '自动精调';
     label.textContent = focus?.motor === motor ? focus.message : (available ? '等待启动' : '当前不可用');
     card.querySelectorAll('.jog,.nudge-row button,.speed,.mode,.hold').forEach(control => { control.disabled = active; });
+  }
+  const active = Boolean(focus?.active);
+  const available = state.config?.capabilities?.autoFocus !== false && focus?.available !== false;
+  elements.fullscreenAutofocus.disabled = !available || (!active && !state.espOnline);
+  elements.fullscreenAutofocus.classList.toggle('running', active);
+  elements.fullscreenAutofocus.querySelector('small').textContent = active ? '取消' : '自动';
+  elements.fullscreenAutofocus.setAttribute('aria-label', active ? '取消自动精调' : '启动自动精调');
+  document.querySelectorAll('.fullscreen-jog').forEach(control => {
+    control.disabled = active || !state.espOnline || !motorByRole(control.dataset.role);
+  });
+}
+
+function controlFullscreenActive() {
+  return document.fullscreenElement === elements.videoShell || document.webkitFullscreenElement === elements.videoShell || elements.videoShell.classList.contains('fullscreen-fallback');
+}
+
+function enterFallbackFullscreen() {
+  elements.videoShell.classList.add('fullscreen-fallback');
+  document.body.classList.add('control-fullscreen-active');
+}
+
+async function enterControlFullscreen() {
+  try {
+    if (elements.videoShell.requestFullscreen) await elements.videoShell.requestFullscreen();
+    else if (elements.videoShell.webkitRequestFullscreen) elements.videoShell.webkitRequestFullscreen();
+    else enterFallbackFullscreen();
+  } catch (_) {
+    enterFallbackFullscreen();
+  }
+}
+
+async function exitControlFullscreen() {
+  stopEveryJog();
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen();
+    else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } catch (_) {}
+  elements.videoShell.classList.remove('fullscreen-fallback');
+  document.body.classList.remove('control-fullscreen-active');
+}
+
+function handleFullscreenChange() {
+  if (!controlFullscreenActive()) {
+    stopEveryJog();
+    elements.videoShell.classList.remove('fullscreen-fallback');
+    document.body.classList.remove('control-fullscreen-active');
   }
 }
 
@@ -388,6 +478,16 @@ function updateVideoStats() {
 }
 
 elements.videoFrame.addEventListener('load', () => setTimeout(() => elements.placeholder.classList.add('hidden'), 700));
+document.querySelectorAll('.fullscreen-jog').forEach(bindFullscreenJog);
+elements.controlFullscreen.addEventListener('click', enterControlFullscreen);
+elements.exitControlFullscreen.addEventListener('click', exitControlFullscreen);
+elements.fullscreenAutofocus.addEventListener('click', () => {
+  const focusMotor = motorByRole('focus');
+  if (focusMotor) toggleAutoFocus(focusMotor.id);
+  else notify('当前没有对焦电机');
+});
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 function localDateValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
