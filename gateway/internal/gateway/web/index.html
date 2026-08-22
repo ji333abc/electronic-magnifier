@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#061018">
   <title>监控摄像头控制台</title>
-  <link rel="stylesheet" href="/styles.css?v=8">
+  <link rel="stylesheet" href="/styles.css?v=9">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -20,7 +20,7 @@
       <div class="health" aria-label="设备连接状态">
         <span class="health-item" data-health="ipc"><i></i>摄像头</span>
         <span class="health-item" data-health="esp"><i></i>镜头控制</span>
-        <span class="health-item" data-health="go2rtc"><i></i>视频流</span>
+        <span class="health-item" data-health="go2rtc"><i></i>视频</span>
       </div>
       <button class="icon-button" id="logoutButton" type="button">退出</button>
     </div>
@@ -29,11 +29,11 @@
   <main class="layout" id="app" hidden>
     <section class="viewer-panel panel">
       <div class="viewer-head section-head">
-        <div><p class="eyebrow"><span></span>LIVE MONITOR</p><h1>实时监控</h1><p class="section-subtitle">低延迟镜头画面</p></div>
+        <div><p class="eyebrow"><span></span>LIVE MONITOR</p><h1>实时监控</h1><p class="section-subtitle">摄像头实时画面</p></div>
       </div>
       <div class="video-shell">
         <div class="video-placeholder" id="videoPlaceholder"><span class="loader"></span><p id="videoPlaceholderText">正在建立视频连接…</p></div>
-        <iframe id="videoFrame" title="IPC 实时视频" allow="autoplay; fullscreen" allowfullscreen webkitallowfullscreen referrerpolicy="same-origin"></iframe>
+        <iframe id="videoFrame" title="摄像头实时视频" allow="autoplay; fullscreen" allowfullscreen webkitallowfullscreen referrerpolicy="same-origin"></iframe>
         <button class="fullscreen-launch" id="controlFullscreen" type="button" aria-label="进入镜头控制全屏" title="镜头控制全屏">⛶</button>
         <button class="fullscreen-exit" id="exitControlFullscreen" type="button" aria-label="退出全屏">×</button>
         <div class="fullscreen-optics" id="fullscreenOptics" role="group" aria-label="全屏镜头控制">
@@ -44,12 +44,12 @@
           <button class="fullscreen-autofocus" id="fullscreenAutofocus" type="button" aria-label="启动自动精调"><b>◎</b><small>自动</small></button>
         </div>
       </div>
-      <div class="viewer-footer"><span id="videoNote">WebRTC · H.264 · 无音频</span><span id="videoStats">等待视频帧…</span></div>
+      <div class="viewer-footer"><span id="videoNote" hidden></span><span id="videoStats">等待视频帧…</span></div>
     </section>
 
     <section class="controls-panel panel">
       <div class="controls-head section-head">
-        <div><p class="eyebrow"><span></span>OPTICS CONTROL</p><h2>镜头控制</h2><p class="section-subtitle">对焦与变焦两路驱动</p></div>
+        <div><p class="eyebrow"><span></span>OPTICS CONTROL</p><h2>镜头控制</h2><p class="section-subtitle">调节画面清晰度与视野范围</p></div>
         <span class="socket-state" id="socketState"><i></i>连接中</span>
       </div>
       <div class="mobile-health" aria-label="移动端设备状态">
@@ -58,13 +58,9 @@
       <div id="motorList" class="motor-list"></div>
       <div class="emergency-row">
         <button class="danger" id="stopAll" type="button"><span aria-hidden="true">■</span>全部停止</button>
-        <button class="quiet" id="releaseAll" type="button">释放全部线圈</button>
+        <button class="quiet" id="releaseAll" type="button">解除电机保持</button>
       </div>
       <p class="safety-note">按住方向键连续运动，松开立即停止。网页断开后系统会自动停机并释放控制权。</p>
-      <div class="capability-panel">
-        <div><strong>扩展能力</strong><small>前后端状态通道已预留</small></div>
-        <div class="capability-list"><span class="ready">限位输入</span><span class="ready">位置反馈</span><span class="ready">自动精调</span></div>
-      </div>
     </section>
 
     <section class="playback-panel panel">
@@ -116,12 +112,12 @@
         <summary>高级设置 <span></span></summary>
         <div class="motor-settings">
           <label>速度 <b class="speed-value"></b><input class="speed" type="range" min="10" max="1000" step="10"></label>
-          <label>步进模式<select class="mode"><option value="half">半步 · 精细</option><option value="full">全步 · 快速</option></select></label>
-          <label class="hold-option"><input class="hold" type="checkbox">移动后保持线圈通电</label>
+          <label>移动模式<select class="mode"><option value="half">精细</option><option value="full">快速</option></select></label>
+          <label class="hold-option"><input class="hold" type="checkbox">移动后保持当前位置</label>
         </div>
       </details>
     </article>
   </template>
-  <script src="/app.js?v=8" defer></script>
+  <script src="/app.js?v=9" defer></script>
 </body>
 </html>

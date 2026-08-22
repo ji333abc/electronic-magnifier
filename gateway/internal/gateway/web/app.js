@@ -101,7 +101,7 @@ function renderMotors() {
     const card = elements.template.content.firstElementChild.cloneNode(true);
     card.dataset.motor = motor.id;
     card.dataset.role = motor.role || 'motor';
-    card.querySelector('.motor-index').textContent = `MOTOR ${String(motor.id).padStart(2, '0')}`;
+    card.querySelector('.motor-index').textContent = `镜头 ${String(motor.id).padStart(2, '0')}`;
     card.querySelector('h3').textContent = motor.name;
     card.querySelector('.min-limit b').textContent = motor.minLimitLabel || motor.negative || '反向限位';
     card.querySelector('.max-limit b').textContent = motor.maxLimitLabel || motor.positive || '正向限位';
@@ -464,7 +464,7 @@ async function refreshStatus() {
       label.dataset.running = motor.running ? '1' : '';
       label.classList.toggle('active', motor.running);
       if (motor.running) label.textContent = motor.continuous ? '连续运动' : `剩余 ${motor.remainingSteps} 步`;
-      else if (!state.leases[motor.motor]) label.textContent = motor.coilsHeld ? '线圈保持' : '空闲';
+      else if (!state.leases[motor.motor]) label.textContent = motor.coilsHeld ? '位置保持' : '空闲';
       card.querySelector('.min-limit')?.classList.toggle('triggered', Boolean(motor.minLimit));
       card.querySelector('.max-limit')?.classList.toggle('triggered', Boolean(motor.maxLimit));
       const position = card.querySelector('.position-state b');
@@ -478,9 +478,16 @@ async function refreshStatus() {
         notify('视频连接不稳定，已自动恢复');
       }
     }
-    if (!status.ipc) elements.videoNote.textContent = 'IPC 离线，请检查网线、电源或地址';
-    else if (!status.go2rtc) elements.videoNote.textContent = '视频网关离线，请检查 go2rtc 服务';
-    else elements.videoNote.textContent = 'WebRTC · H.264 · 无音频';
+    if (!status.ipc) {
+      elements.videoNote.hidden = false;
+      elements.videoNote.textContent = '摄像头离线，请检查网络、电源或设备地址';
+    } else if (!status.go2rtc) {
+      elements.videoNote.hidden = false;
+      elements.videoNote.textContent = '视频服务暂时不可用';
+    } else {
+      elements.videoNote.hidden = true;
+      elements.videoNote.textContent = '';
+    }
     state.leases = status.leases || state.leases;
     updateLeaseUI();
   } catch (_) {}
@@ -656,7 +663,7 @@ async function loadRecordings() {
   } catch (error) {
     if (requestId !== state.recordingRequest || error.message === 'authentication_required') return;
     elements.recordingSummary.textContent = '录像服务离线';
-    elements.recordingList.innerHTML = '<div class="recording-list-message">无法读取录像，请检查 MediaMTX 和录像硬盘。</div>';
+    elements.recordingList.innerHTML = '<div class="recording-list-message">无法读取录像，请检查录像服务和存储设备。</div>';
   }
 }
 
