@@ -505,7 +505,7 @@ function loadVideoStream(kind) {
   state.mainFailures = 0;
   resetVideoStats('正在建立视频连接…');
   const source = encodeURIComponent(state.config.streams[kind]);
-  elements.videoFrame.src = `/stream/stream.html?src=${source}&mode=webrtc&media=video&_=${Date.now()}`;
+  elements.videoFrame.src = `/stream/stream.html?src=${source}&mode=webrtc,mse&media=video&_=${Date.now()}`;
 }
 
 function videoFrameSample(video) {

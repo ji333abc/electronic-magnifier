@@ -1,0 +1,59 @@
+name: Build H.265 test ARMv7
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+
+    steps:
+      - name: Check out H.265 test source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: gateway/go.mod
+          cache-dependency-path: gateway/go.sum
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build Linux ARMv7 H.265 test binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm
+          GOARM: "7"
+        run: go build -trimpath -ldflags="-s -w" -o lens-gateway-armv7-h265-test ./cmd/lens-gateway
+
+      - name: Package and checksum
+        run: |
+          chmod 0755 lens-gateway-armv7-h265-test
+          sha256sum lens-gateway-armv7-h265-test > lens-gateway-armv7-h265-test.sha256
+          tar -czf lens-gateway-armv7-h265-test.tar.gz lens-gateway-armv7-h265-test
+
+      - name: Publish H.265 test Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: h265-test-${{ github.run_number }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            lens-gateway-armv7-h265-test \
+            lens-gateway-armv7-h265-test.tar.gz \
+            lens-gateway-armv7-h265-test.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "H.265 TEST ONLY #${GITHUB_RUN_NUMBER}" \
+            --notes "TEST ONLY. This build keeps the current main functionality and enables WebRTC plus MSE playback for an IPC stream configured as H.265. It does not change the camera encoder configuration and must not replace the normal main Release." \
+            --prerelease
