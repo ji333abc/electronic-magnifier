@@ -10,7 +10,7 @@ const state = {
   statusTimer: null, fpsTimer: null, measuredVideo: null,
   lastFrameCount: 0, lastFrameTime: 0, lastFrameAdvanceTime: 0, streamStartedAt: 0,
   lastVideoRecoveryTime: 0, videoRecoveryCount: 0, videoStableSince: 0,
-  recordingRequest: 0, autoFocus: null, espOnline: false,
+  recordingRequest: 0, autoFocus: null, espOnline: false, orientationLocked: false,
 };
 
 const elements = {
@@ -293,16 +293,53 @@ function controlFullscreenActive() {
   return document.fullscreenElement === elements.videoShell || document.webkitFullscreenElement === elements.videoShell || elements.videoShell.classList.contains('fullscreen-fallback');
 }
 
+function portraitTouchscreen() {
+  return matchMedia('(orientation: portrait)').matches && navigator.maxTouchPoints > 0;
+}
+
+function updateFallbackLandscape() {
+  elements.videoShell.classList.toggle('fullscreen-landscape-fallback', elements.videoShell.classList.contains('fullscreen-fallback') && portraitTouchscreen());
+}
+
 function enterFallbackFullscreen() {
   elements.videoShell.classList.add('fullscreen-fallback');
   document.body.classList.add('control-fullscreen-active');
+  updateFallbackLandscape();
+}
+
+async function lockControlLandscape() {
+  if (!portraitTouchscreen()) return true;
+  if (!screen.orientation?.lock) return false;
+  try {
+    await screen.orientation.lock('landscape');
+    state.orientationLocked = true;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function unlockControlOrientation() {
+  if (!state.orientationLocked) return;
+  try { screen.orientation?.unlock?.(); } catch (_) {}
+  state.orientationLocked = false;
 }
 
 async function enterControlFullscreen() {
+  const needsLandscape = portraitTouchscreen();
+  if (needsLandscape && !screen.orientation?.lock) {
+    enterFallbackFullscreen();
+    return;
+  }
   try {
     if (elements.videoShell.requestFullscreen) await elements.videoShell.requestFullscreen();
     else if (elements.videoShell.webkitRequestFullscreen) elements.videoShell.webkitRequestFullscreen();
     else enterFallbackFullscreen();
+    if (needsLandscape && !await lockControlLandscape()) {
+      if (document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+      enterFallbackFullscreen();
+    }
   } catch (_) {
     enterFallbackFullscreen();
   }
@@ -314,7 +351,9 @@ async function exitControlFullscreen() {
     if (document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen();
     else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
   } catch (_) {}
+  unlockControlOrientation();
   elements.videoShell.classList.remove('fullscreen-fallback');
+  elements.videoShell.classList.remove('fullscreen-landscape-fallback');
   document.body.classList.remove('control-fullscreen-active');
 }
 
@@ -322,9 +361,22 @@ function handleFullscreenChange() {
   state.lastFrameAdvanceTime = performance.now();
   if (!controlFullscreenActive()) {
     stopEveryJog();
+    unlockControlOrientation();
     elements.videoShell.classList.remove('fullscreen-fallback');
+    elements.videoShell.classList.remove('fullscreen-landscape-fallback');
     document.body.classList.remove('control-fullscreen-active');
   }
+}
+
+function hideEmbeddedPlayerMode() {
+  try {
+    const frameDocument = elements.videoFrame.contentDocument;
+    if (!frameDocument?.head || frameDocument.querySelector('#lens-player-style')) return;
+    const style = frameDocument.createElement('style');
+    style.id = 'lens-player-style';
+    style.textContent = 'video-stream .info .mode{display:none!important}';
+    frameDocument.head.append(style);
+  } catch (_) {}
 }
 
 function stopEveryJog() {
@@ -548,6 +600,7 @@ elements.videoFrame.addEventListener('load', () => {
   state.streamStartedAt = performance.now();
   state.lastFrameAdvanceTime = state.streamStartedAt;
   showVideoPlaceholder('正在等待视频帧…');
+  hideEmbeddedPlayerMode();
 });
 document.querySelectorAll('.fullscreen-jog').forEach(bindFullscreenJog);
 elements.controlFullscreen.addEventListener('click', enterControlFullscreen);
@@ -559,6 +612,8 @@ elements.fullscreenAutofocus.addEventListener('click', () => {
 });
 document.addEventListener('fullscreenchange', handleFullscreenChange);
 document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+window.addEventListener('resize', updateFallbackLandscape);
+window.addEventListener('orientationchange', updateFallbackLandscape);
 function localDateValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');

@@ -49,6 +49,7 @@ h1,h2,h3,p { margin-top:0; } h1,h2 { margin-bottom:0; letter-spacing:.015em; } h
 .video-shell:fullscreen .fullscreen-exit,.video-shell:-webkit-full-screen .fullscreen-exit,.video-shell.fullscreen-fallback .fullscreen-exit { display:block; }
 .video-shell:fullscreen .fullscreen-optics,.video-shell:-webkit-full-screen .fullscreen-optics,.video-shell.fullscreen-fallback .fullscreen-optics { display:flex; }
 .video-shell.fullscreen-fallback { position:fixed; inset:0; z-index:100; }
+.video-shell.fullscreen-fallback.fullscreen-landscape-fallback { inset:auto; top:50%; left:50%; width:100vh; height:100vw; width:100dvh; height:100dvw; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center; }
 body.control-fullscreen-active { overflow:hidden; }
 .video-placeholder { position:absolute; inset:0; z-index:1; display:grid; place-content:center; justify-items:center; color:var(--muted); background:radial-gradient(circle,#0e2936,#02080c 67%); transition:opacity .3s; pointer-events:none; }
 .video-placeholder.hidden { opacity:0; }.video-placeholder p { margin:13px 0 0; font-size:.77rem; }
