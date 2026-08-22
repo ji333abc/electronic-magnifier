@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#061018">
   <title>监控摄像头控制台</title>
-  <link rel="stylesheet" href="/styles.css?v=4">
+  <link rel="stylesheet" href="/styles.css?v=5">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -30,15 +30,10 @@
     <section class="viewer-panel panel">
       <div class="viewer-head section-head">
         <div><p class="eyebrow"><span></span>LIVE MONITOR</p><h1>实时监控</h1><p class="section-subtitle">低延迟镜头画面</p></div>
-        <div class="stream-switch" role="group" aria-label="画质选择">
-          <button class="active" type="button" data-stream="main">高清</button>
-          <button type="button" data-stream="sub">流畅</button>
-        </div>
       </div>
       <div class="video-shell">
         <div class="video-placeholder" id="videoPlaceholder"><span class="loader"></span><p>正在建立视频连接…</p></div>
-        <iframe id="videoFrame" title="IPC 实时视频" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe>
-        <div class="video-badge"><span></span><b id="streamLabel">主码流</b></div>
+        <iframe id="videoFrame" title="IPC 实时视频" allow="autoplay; fullscreen" allowfullscreen webkitallowfullscreen referrerpolicy="same-origin"></iframe>
       </div>
       <div class="viewer-footer"><span id="videoNote">WebRTC · H.264 · 无音频</span><span id="videoStats">等待视频帧…</span></div>
     </section>
@@ -118,6 +113,6 @@
       </details>
     </article>
   </template>
-  <script src="/app.js?v=4" defer></script>
+  <script src="/app.js?v=5" defer></script>
 </body>
 </html>

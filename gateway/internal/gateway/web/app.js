@@ -11,7 +11,7 @@ const elements = {
   loginForm: document.querySelector('#loginForm'), loginError: document.querySelector('#loginError'),
   motorList: document.querySelector('#motorList'), template: document.querySelector('#motorTemplate'),
   videoFrame: document.querySelector('#videoFrame'), placeholder: document.querySelector('#videoPlaceholder'),
-  streamLabel: document.querySelector('#streamLabel'), videoNote: document.querySelector('#videoNote'),
+  videoNote: document.querySelector('#videoNote'),
   videoStats: document.querySelector('#videoStats'),
   socketState: document.querySelector('#socketState'), toast: document.querySelector('#toast'),
   recordingDate: document.querySelector('#recordingDate'), recordingList: document.querySelector('#recordingList'),
@@ -45,7 +45,7 @@ async function startApp() {
   elements.loginLayer.classList.add('hidden');
   elements.app.hidden = false;
   renderMotors();
-  switchStream('main', false);
+  switchStream('main');
   connectControl();
   await refreshStatus();
   clearInterval(state.statusTimer);
@@ -324,28 +324,25 @@ async function refreshStatus() {
       state.mainFailures = status.streams?.main?.online ? 0 : state.mainFailures + 1;
       if (state.mainFailures >= 3) {
         switchStream('sub');
-        notify('主码流未就绪，已自动切换到流畅模式');
+        notify('视频连接不稳定，已自动恢复');
       }
     }
     if (!status.ipc) elements.videoNote.textContent = 'IPC 离线，请检查网线、电源或地址';
     else if (!status.go2rtc) elements.videoNote.textContent = '视频网关离线，请检查 go2rtc 服务';
-    else elements.videoNote.textContent = `WebRTC · H.264 · 无音频 · ${state.stream === 'main' ? '主码流' : '子码流'}`;
+    else elements.videoNote.textContent = 'WebRTC · H.264 · 无音频';
     state.leases = status.leases || state.leases;
     updateLeaseUI();
   } catch (_) {}
 }
 
-function switchStream(kind, announce = true) {
+function switchStream(kind) {
   if (!state.config) return;
   state.stream = kind;
   state.mainFailures = 0;
-  document.querySelectorAll('[data-stream]').forEach(button => button.classList.toggle('active', button.dataset.stream === kind));
-  elements.streamLabel.textContent = kind === 'main' ? '主码流' : '子码流';
   elements.placeholder.classList.remove('hidden');
   resetVideoStats();
   const source = encodeURIComponent(state.config.streams[kind]);
   elements.videoFrame.src = `/stream/stream.html?src=${source}&mode=webrtc&media=video`;
-  if (announce) notify(kind === 'main' ? '已切换高清主码流' : '已切换流畅子码流');
 }
 
 function decodedFrameCount(video) {
@@ -390,7 +387,6 @@ function updateVideoStats() {
   state.lastFrameTime = now;
 }
 
-document.querySelectorAll('[data-stream]').forEach(button => button.addEventListener('click', () => switchStream(button.dataset.stream)));
 elements.videoFrame.addEventListener('load', () => setTimeout(() => elements.placeholder.classList.add('hidden'), 700));
 function localDateValue(date) {
   const year = date.getFullYear();
