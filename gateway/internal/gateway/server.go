@@ -91,7 +91,7 @@ func NewServer(config Config, secrets Secrets) (*Server, error) {
 		config: config, secrets: secrets, sessions: newSessionStore(secrets.SessionSecret, config.SessionDuration()),
 		esp: esp, attempts: make(map[string][]time.Time), go2rtcURL: target,
 		playbackURL:    playbackTarget,
-		playbackClient: &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 5 * time.Second}},
+		playbackClient: &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 30 * time.Second}},
 		streamActivity: make(map[string]streamActivity),
 	}
 	motorIDs := make([]int, 0, len(config.Motors))

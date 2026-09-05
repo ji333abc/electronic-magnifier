@@ -40,6 +40,8 @@ async function api(path, options = {}) {
 }
 
 function showLogin() {
+  ++state.recordingRequest;
+  resetRecordingPlayer();
   if (controlFullscreenActive()) exitControlFullscreen();
   elements.loginLayer.classList.remove('hidden');
   elements.app.hidden = true;
@@ -94,10 +96,18 @@ document.querySelector('#logoutButton').addEventListener('click', async () => {
   showLogin();
 });
 
+// Swap presentation only; the configured direction and limit signals stay intact.
+function displayMotor(motor) {
+  if (!motor || !['focus', 'zoom'].includes(motor.role)) return motor;
+  return { ...motor, negative: motor.positive, positive: motor.negative,
+    minLimitLabel: motor.maxLimitLabel, maxLimitLabel: motor.minLimitLabel };
+}
+
 function renderMotors() {
   elements.motorList.replaceChildren();
   state.cards.clear();
-  for (const motor of state.config.motors) {
+  for (const configuredMotor of state.config.motors) {
+    const motor = displayMotor(configuredMotor);
     const card = elements.template.content.firstElementChild.cloneNode(true);
     card.dataset.motor = motor.id;
     card.dataset.role = motor.role || 'motor';
@@ -147,10 +157,10 @@ function motorByRole(role) {
 
 function updateFullscreenControlLabels() {
   for (const button of document.querySelectorAll('.fullscreen-jog')) {
-    const motor = motorByRole(button.dataset.role);
+    const motor = displayMotor(motorByRole(button.dataset.role));
     const direction = button.dataset.direction;
     const label = direction === 'ccw' ? motor?.negative : motor?.positive;
-    const fallback = button.dataset.role === 'focus' ? (direction === 'ccw' ? '近焦' : '远焦') : (direction === 'ccw' ? '广角' : '长焦');
+    const fallback = button.dataset.role === 'focus' ? (direction === 'ccw' ? '远焦' : '近焦') : (direction === 'ccw' ? '长焦' : '广角');
     button.querySelector('small').textContent = label || fallback;
     button.disabled = !motor;
     button.setAttribute('aria-label', `${motor?.name || (button.dataset.role === 'focus' ? '对焦' : '变焦')} ${label || fallback}，按住运动`);
@@ -639,6 +649,8 @@ function updateRecordingDateButtons() {
 }
 
 function changeRecordingDay(offset) {
+  initializeRecordingDate();
+  resetRecordingPlayer();
   const date = new Date(`${elements.recordingDate.value}T12:00:00`);
   date.setDate(date.getDate() + offset);
   const today = localDateValue(new Date());
@@ -648,8 +660,9 @@ function changeRecordingDay(offset) {
 }
 
 async function loadRecordings() {
-  if (!elements.recordingDate.value || elements.app.hidden) return;
   const requestId = ++state.recordingRequest;
+  if (elements.app.hidden) return;
+  initializeRecordingDate();
   const start = new Date(`${elements.recordingDate.value}T00:00:00`);
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
@@ -690,17 +703,38 @@ function renderRecordings(recordings) {
   }
 }
 
+function resetRecordingPlayer() {
+  elements.recordingPlayer.pause();
+  elements.recordingPlayer.removeAttribute('src');
+  elements.recordingPlayer.load();
+  elements.recordingPlayerEmpty.textContent = '从片段列表选择录像';
+  elements.recordingPlayerEmpty.classList.remove('hidden');
+  elements.recordingNow.textContent = '录像按 10 分钟分段，硬盘自动保留最近 36 小时。';
+}
+
 function playRecording(recording, button) {
   document.querySelectorAll('.recording-item').forEach(item => item.classList.toggle('active', item === button));
   const query = new URLSearchParams({ start: recording.start, duration: String(recording.duration) });
   elements.recordingPlayer.src = `/api/recordings/play?${query}`;
   elements.recordingPlayerEmpty.classList.add('hidden');
   const start = new Date(recording.start);
-  elements.recordingNow.textContent = `正在回放：${start.toLocaleString('zh-CN', { hour12: false })}`;
-  elements.recordingPlayer.play().catch(() => {});
+  const label = start.toLocaleString('zh-CN', { hour12: false });
+  elements.recordingNow.textContent = `已选择录像：${label}`;
+  const source = elements.recordingPlayer.src;
+  elements.recordingPlayer.play().catch(error => {
+    if (elements.recordingPlayer.src !== source || error.name === 'AbortError') return;
+    if (error.name === 'NotAllowedError') elements.recordingNow.textContent = '请点击播放器播放按钮开始回放。';
+  });
 }
 
-elements.recordingDate.addEventListener('change', () => { updateRecordingDateButtons(); loadRecordings(); });
+elements.recordingPlayer.addEventListener('error', () => {
+  if (!elements.recordingPlayer.getAttribute('src') || !elements.recordingPlayer.error) return;
+  elements.recordingPlayerEmpty.textContent = '录像无法播放，请刷新列表后重试。';
+  elements.recordingPlayerEmpty.classList.remove('hidden');
+  elements.recordingNow.textContent = '录像可能已过期、服务不可用，或浏览器不支持此录像编码。';
+});
+elements.recordingPlayer.addEventListener('playing', () => elements.recordingPlayerEmpty.classList.add('hidden'));
+elements.recordingDate.addEventListener('change', () => { resetRecordingPlayer(); updateRecordingDateButtons(); loadRecordings(); });
 document.querySelector('#previousRecordingDay').addEventListener('click', () => changeRecordingDay(-1));
 document.querySelector('#nextRecordingDay').addEventListener('click', () => changeRecordingDay(1));
 document.querySelector('#refreshRecordings').addEventListener('click', loadRecordings);

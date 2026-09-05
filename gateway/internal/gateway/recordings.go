@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -49,6 +50,10 @@ func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request, _ stri
 		return
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		writeJSON(w, http.StatusOK, map[string]any{"recordings": []recordingClip{}})
+		return
+	}
 	if response.StatusCode/100 != 2 {
 		http.Error(w, "录像服务返回错误", http.StatusBadGateway)
 		return
@@ -69,7 +74,7 @@ func (s *Server) handleRecordingPlayback(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	duration, err := strconv.ParseFloat(r.URL.Query().Get("duration"), 64)
-	if err != nil || duration <= 0 || duration > recordingClipDuration.Seconds()+1 {
+	if err != nil || math.IsNaN(duration) || math.IsInf(duration, 0) || duration <= 0 || duration > recordingClipDuration.Seconds()+1 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_duration"})
 		return
 	}
@@ -79,6 +84,7 @@ func (s *Server) handleRecordingPlayback(w http.ResponseWriter, r *http.Request,
 	query.Set("path", s.config.MainStream)
 	query.Set("start", start.Format(time.RFC3339Nano))
 	query.Set("duration", strconv.FormatFloat(duration, 'f', 3, 64))
+	query.Set("format", "mp4")
 	target.RawQuery = query.Encode()
 
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
@@ -144,7 +150,11 @@ func splitRecordingSpans(spans []recordingSpan, windowStart, windowEnd time.Time
 			})
 		}
 	}
-	sort.Slice(clips, func(i, j int) bool { return clips[i].Start > clips[j].Start })
+	sort.Slice(clips, func(i, j int) bool {
+		left, _ := time.Parse(time.RFC3339Nano, clips[i].Start)
+		right, _ := time.Parse(time.RFC3339Nano, clips[j].Start)
+		return left.After(right)
+	})
 	return clips
 }
 
