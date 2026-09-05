@@ -32,6 +32,8 @@ try {
         onError: reason => window.failures.push(reason),
       });
       window.player.open('/api/recordings/play?start=2026-09-05T00:00:00Z&duration=48');
+      console.log('playback support', JSON.stringify({ native: document.querySelector('video').canPlayType('application/vnd.apple.mpegurl'), mse: Hls.isSupported(), engine: !!window.player.hls }));
+      window.player.hls?.on(Hls.Events.ERROR, (_, data) => console.log('HLS diagnostic', JSON.stringify({ type: data.type, details: data.details, fatal: data.fatal, error: data.error?.message, reason: data.reason })));
     });
     const checkColor = async (channel, time) => {
       await page.waitForFunction(({ channel, time }) => {
@@ -43,7 +45,16 @@ try {
         ctx.drawImage(video, 0, 0, 320, 180);
         const rgb = ctx.getImageData(40, 40, 1, 1).data;
         return rgb[channel] > 80 && rgb[channel] > rgb[(channel+1)%3]*2 && rgb[channel] > rgb[(channel+2)%3]*2;
-      }, { channel, time }, { timeout: 30000 });
+      }, { channel, time }, { timeout: 30000 }).catch(async error => {
+        console.log('playback state', await page.evaluate(() => {
+          const v = document.querySelector('video');
+          const c = document.createElement('canvas'); c.width=320; c.height=180;
+          const x = c.getContext('2d'); if (v.readyState >= 2) x.drawImage(v,0,0,320,180);
+          return { failures: window.failures, time: v.currentTime, duration: v.duration, paused: v.paused, ready: v.readyState, error: v.error?.message, ranges: Array.from({length:v.buffered.length}, (_,i)=>[v.buffered.start(i),v.buffered.end(i)]), rgb: [...x.getImageData(40,40,1,1).data] };
+        }));
+        console.log('segment requests', requests.map(u => u.search));
+        throw error;
+      });
     };
     await checkColor(0, 0.1);
     assert.equal(await page.evaluate(() => Math.round(document.querySelector('video').duration)), 48);
