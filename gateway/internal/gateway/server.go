@@ -71,6 +71,7 @@ type Server struct {
 	go2rtcURL      *url.URL
 	playbackURL    *url.URL
 	playbackClient *http.Client
+	playbackCache  recordingPlaybackCache
 	attemptMu      sync.Mutex
 	attempts       map[string][]time.Time
 	streamMu       sync.Mutex

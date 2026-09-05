@@ -1,12 +1,16 @@
 package gateway
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -87,28 +91,88 @@ func (s *Server) handleRecordingPlayback(w http.ResponseWriter, r *http.Request,
 	query.Set("format", "mp4")
 	target.RawQuery = query.Encode()
 
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
+	// MediaMTX generates MP4 dynamically and returns Accept-Ranges: none.
+	// Keep one stable representation per clip, then let ServeContent implement
+	// byte ranges (including suffix requests and HEAD) for native video seeking.
+	file, release, err := s.playbackCache.acquire(r.Context(), target.String(), func() (string, error) {
+		return s.prepareRecordingPlayback(r.Context(), target.String())
+	})
 	if err != nil {
-		http.Error(w, "录像播放地址无效", http.StatusInternalServerError)
+		status := http.StatusBadGateway
+		var playbackErr *recordingPlaybackError
+		if errors.As(err, &playbackErr) {
+			status = playbackErr.status
+		}
+		if status == http.StatusServiceUnavailable {
+			w.Header().Set("Retry-After", "2")
+		}
+		http.Error(w, "录像暂时无法播放，请稍后重试", status)
 		return
 	}
-	if value := r.Header.Get("Range"); value != "" {
-		request.Header.Set("Range", value)
+	defer release()
+	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Cache-Control", "private, no-store")
+	// A regenerated clip must not satisfy If-Range for an older representation.
+	identity := sha256.Sum256([]byte(file.Name()))
+	w.Header().Set("ETag", fmt.Sprintf("\"%x\"", identity))
+	http.ServeContent(recordingPlaybackWriter{w}, r, "recording.mp4", time.Time{}, file)
+}
+
+type recordingPlaybackWriter struct {
+	http.ResponseWriter
+}
+
+func (w recordingPlaybackWriter) WriteHeader(status int) {
+	// ServeContent clears cache headers on errors such as an invalid range.
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (s *Server) prepareRecordingPlayback(parent context.Context, target string) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return "", err
 	}
 	response, err := s.playbackClient.Do(request)
 	if err != nil {
-		http.Error(w, "录像暂时无法播放", http.StatusBadGateway)
-		return
+		return "", err
 	}
 	defer response.Body.Close()
-	for _, name := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Last-Modified"} {
-		if value := response.Header.Get(name); value != "" {
-			w.Header().Set(name, value)
+	if response.StatusCode != http.StatusOK {
+		status := http.StatusBadGateway
+		if response.StatusCode == http.StatusNotFound {
+			status = http.StatusNotFound
 		}
+		return "", &recordingPlaybackError{status: status}
 	}
-	w.Header().Set("Cache-Control", "private, no-store")
-	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	if response.ContentLength > recordingPlaybackMaxBytes {
+		return "", fmt.Errorf("recording exceeds playback size limit")
+	}
+	file, err := os.CreateTemp(s.playbackCache.tempDir(), "lens-playback-*.mp4")
+	if err != nil {
+		return "", err
+	}
+	keep := false
+	defer func() {
+		file.Close()
+		if !keep {
+			os.Remove(file.Name())
+		}
+	}()
+	size, err := io.Copy(file, io.LimitReader(response.Body, recordingPlaybackMaxBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if size == 0 || size > recordingPlaybackMaxBytes || (response.ContentLength >= 0 && size != response.ContentLength) {
+		return "", fmt.Errorf("incomplete or oversized recording")
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	keep = true
+	return file.Name(), nil
 }
 
 func recordingWindow(query url.Values) (time.Time, time.Time, error) {

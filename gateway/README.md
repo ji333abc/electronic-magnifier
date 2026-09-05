@@ -98,6 +98,10 @@ sudo ufw allow in on tailscale0 to any port 8555 proto udp
 
 ## 6. 验证
 
+录像回放通过中控将 MediaMTX 动态生成的 MP4 暂存到 `/var/tmp`，再提供 HTTP 字节范围读取，支持播放器原生进度条向前、向后拖动。首次打开片段需要等待准备完成；同时最多暂存两个片段，每段上限 512 MiB，空闲两分钟后自动删除。该目录需有最多约 1 GiB 可用空间；临时文件只用于回放，不影响录像硬盘上的原始文件和 36 小时保留策略。
+
+更新中控二进制并重启后，在网页选一个已完成的录像片段，依次拖到后半段和前半段，确认画面及播放时间随之变化。浏览器网络面板中的范围请求应返回 `206`、`Accept-Ranges: bytes` 和对应的 `Content-Range`。
+
 ```sh
 curl http://127.0.0.1/api/health
 journalctl -u go2rtc -u lens-gateway -f
