@@ -10,7 +10,7 @@ try {
     const errors = [];
     const requests = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('console', msg => { if (msg.type() === 'error') console.log('browser:', msg.text()); });
+    page.on('console', msg => console.log(`browser ${msg.type()}:`, msg.text()));
     page.on('request', request => {
       if (request.url().includes('/api/recordings/segment')) requests.push(new URL(request.url()));
     });
