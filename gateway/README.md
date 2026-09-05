@@ -98,9 +98,11 @@ sudo ufw allow in on tailscale0 to any port 8555 proto udp
 
 ## 6. 验证
 
-录像回放通过中控将 MediaMTX 动态生成的 MP4 暂存到 `/var/tmp`，再提供 HTTP 字节范围读取，支持播放器原生进度条向前、向后拖动。首次打开片段需要等待准备完成；同时最多暂存两个片段，每段上限 512 MiB，空闲两分钟后自动删除。该目录需有最多约 1 GiB 可用空间；临时文件只用于回放，不影响录像硬盘上的原始文件和 36 小时保留策略。
+录像回放采用 HLS 点播，每个请求从 MediaMTX 获取最多 6 秒 fMP4，边读取边传给浏览器。浏览器缓冲当前位置附近的片段，拖动时直接请求目标位置；不再将整段录像缓存到 `/var/tmp`。单个中控最多同时处理 4 个分片请求，失败时播放器会有限重试。原始录像和 36 小时保留策略不变。
 
-更新中控二进制并重启后，在网页选一个已完成的录像片段，依次拖到后半段和前半段，确认画面及播放时间随之变化。浏览器网络面板中的范围请求应返回 `206`、`Accept-Ranges: bytes` 和对应的 `Content-Range`。
+更新中控二进制并重启后，在网页选一个已完成的录像片段，依次拖到后半段和前半段，确认画面及播放时间随之变化。网络面板应出现 `/api/recordings/play` 的 HLS 列表，以及 `/api/recordings/segment` 的短分片请求。Safari 使用原生 HLS，其他支持 MSE 的浏览器使用内置 HLS.js，无需访问外部 CDN。Actions 用 FFmpeg 生成实际录像，经过 MediaMTX 1.20.0 和 Chromium 验证桌面、窄屏播放、跨片段连续播放、前后拖动、重试和快速切换。
+
+内置 `web/hls-1.7.2.min.js` 来自 [HLS.js v1.7.2 官方 release.zip](https://github.com/video-dev/hls.js/releases/tag/v1.7.2) 中的 `dist/hls.light.min.js`，SHA-256 为 `051be2ccf5579770e2a8eb324c776f4b57c104d861cca808c0f06937f1ef92fc`；许可证见同目录 `hls-LICENSE.txt`。
 
 ```sh
 curl http://127.0.0.1/api/health

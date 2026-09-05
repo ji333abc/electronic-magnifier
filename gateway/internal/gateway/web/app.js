@@ -703,10 +703,21 @@ function renderRecordings(recordings) {
   }
 }
 
+const recordingPlayback = new window.RecordingPlayback(elements.recordingPlayer, {
+  onError(reason) {
+    elements.recordingPlayerEmpty.textContent = reason === 'recording_missing'
+      ? '这个时段的录像已缺失或过期，请选择其他片段。'
+      : reason === 'unsupported_browser' ? '当前浏览器不支持录像回放，请更换浏览器。'
+      : '录像加载失败，请刷新列表后重试。';
+    elements.recordingPlayerEmpty.classList.remove('hidden');
+    elements.recordingNow.textContent = '可重新选择片段重试。';
+  },
+  onAutoplayBlocked() { elements.recordingNow.textContent = '请点击播放器播放按钮开始回放。'; },
+  onAuthenticationRequired: showLogin,
+});
+
 function resetRecordingPlayer() {
-  elements.recordingPlayer.pause();
-  elements.recordingPlayer.removeAttribute('src');
-  elements.recordingPlayer.load();
+  recordingPlayback.close();
   elements.recordingPlayerEmpty.textContent = '从片段列表选择录像';
   elements.recordingPlayerEmpty.classList.remove('hidden');
   elements.recordingNow.textContent = '录像按 10 分钟分段，硬盘自动保留最近 36 小时。';
@@ -715,24 +726,13 @@ function resetRecordingPlayer() {
 function playRecording(recording, button) {
   document.querySelectorAll('.recording-item').forEach(item => item.classList.toggle('active', item === button));
   const query = new URLSearchParams({ start: recording.start, duration: String(recording.duration) });
-  elements.recordingPlayer.src = `/api/recordings/play?${query}`;
   elements.recordingPlayerEmpty.classList.add('hidden');
   const start = new Date(recording.start);
   const label = start.toLocaleString('zh-CN', { hour12: false });
   elements.recordingNow.textContent = `已选择录像：${label}`;
-  const source = elements.recordingPlayer.src;
-  elements.recordingPlayer.play().catch(error => {
-    if (elements.recordingPlayer.src !== source || error.name === 'AbortError') return;
-    if (error.name === 'NotAllowedError') elements.recordingNow.textContent = '请点击播放器播放按钮开始回放。';
-  });
+  recordingPlayback.open(`/api/recordings/play?${query}`);
 }
 
-elements.recordingPlayer.addEventListener('error', () => {
-  if (!elements.recordingPlayer.getAttribute('src') || !elements.recordingPlayer.error) return;
-  elements.recordingPlayerEmpty.textContent = '录像无法播放，请刷新列表后重试。';
-  elements.recordingPlayerEmpty.classList.remove('hidden');
-  elements.recordingNow.textContent = '录像可能已过期、服务不可用，或浏览器不支持此录像编码。';
-});
 elements.recordingPlayer.addEventListener('playing', () => elements.recordingPlayerEmpty.classList.add('hidden'));
 elements.recordingDate.addEventListener('change', () => { resetRecordingPlayer(); updateRecordingDateButtons(); loadRecordings(); });
 document.querySelector('#previousRecordingDay').addEventListener('click', () => changeRecordingDay(-1));

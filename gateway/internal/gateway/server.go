@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -71,7 +72,7 @@ type Server struct {
 	go2rtcURL      *url.URL
 	playbackURL    *url.URL
 	playbackClient *http.Client
-	playbackCache  recordingPlaybackCache
+	playbackActive atomic.Int32
 	attemptMu      sync.Mutex
 	attempts       map[string][]time.Time
 	streamMu       sync.Mutex
@@ -135,6 +136,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/autofocus", s.requireSession(s.handleAutoFocusCancel))
 	mux.HandleFunc("GET /api/recordings", s.requireSession(s.handleRecordings))
 	mux.HandleFunc("GET /api/recordings/play", s.requireSession(s.handleRecordingPlayback))
+	mux.HandleFunc("GET /api/recordings/segment", s.requireSession(s.handleRecordingSegment))
 	mux.HandleFunc("GET /api/control", s.requireSession(s.handleControlWS))
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, map[string]bool{"ok": true}) })
 	mux.HandleFunc("/stream/", s.requireSession(s.handleStreamProxy))
@@ -399,7 +401,7 @@ func securityHeaders(next http.Handler) http.Handler {
 			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; media-src 'self' blob:; img-src 'self' data:; frame-ancestors 'self'")
 		} else {
 			w.Header().Set("Cache-Control", "no-store")
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ws: wss:; frame-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ws: wss:; media-src 'self' blob:; frame-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'")
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")

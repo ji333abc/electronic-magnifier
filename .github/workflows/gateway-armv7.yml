@@ -37,6 +37,24 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Set up playback browser test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          npm install --prefix tests --no-save --package-lock=false playwright@1.56.1
+          tests/node_modules/.bin/playwright install --with-deps chromium
+          mkdir -p "$RUNNER_TEMP/playback-mediamtx"
+          gh release download v1.20.0 --repo bluenviron/mediamtx --pattern mediamtx_v1.20.0_linux_amd64.tar.gz --dir "$RUNNER_TEMP/playback-mediamtx"
+          echo "952d5f7d31d1b448ab4da4509550594c511d42636db9d7bb175d377f4ede81df  $RUNNER_TEMP/playback-mediamtx/mediamtx_v1.20.0_linux_amd64.tar.gz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/playback-mediamtx/mediamtx_v1.20.0_linux_amd64.tar.gz" -C "$RUNNER_TEMP/playback-mediamtx" mediamtx
+
+      - name: Test real recording playback in desktop and mobile browsers
+        env:
+          PLAYBACK_TEST_MEDIAMTX: ${{ runner.temp }}/playback-mediamtx/mediamtx
+        run: go test -race ./internal/gateway -run '^TestRecordingBrowser$' -count=1 -v -timeout 5m
+
       - name: Build Linux ARMv7 binary
         env:
           CGO_ENABLED: "0"
