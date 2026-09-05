@@ -1,5 +1,5 @@
 // HLS keeps a short playback buffer and requests the target segment on seek.
-// Native HLS handles Safari; the bundled hls.js handles MSE browsers offline.
+// Prefer bundled hls.js for predictable buffering/retries, with native fallback.
 window.RecordingPlayback = class RecordingPlayback {
   constructor(video, { onError, onAutoplayBlocked, onAuthenticationRequired } = {}) {
     this.video = video;
@@ -22,14 +22,15 @@ window.RecordingPlayback = class RecordingPlayback {
         if (error.name === 'NotAllowedError') this.onAutoplayBlocked();
       });
     };
-    if (this.video.canPlayType('application/vnd.apple.mpegurl')) {
+    const mseSupported = window.Hls?.isSupported();
+    if (!mseSupported && this.video.canPlayType('application/vnd.apple.mpegurl')) {
       this.nativeError = () => { if (current()) this.onError('playback_failed'); };
       this.video.addEventListener('error', this.nativeError);
       this.video.src = url;
       play();
       return;
     }
-    if (!window.Hls?.isSupported()) {
+    if (!mseSupported) {
       this.onError('unsupported_browser');
       return;
     }

@@ -33,6 +33,7 @@ try {
         onError: reason => window.failures.push(reason),
       });
       window.player.open('/api/recordings/play?start=2026-09-05T00:00:00Z&duration=48');
+      if (!window.player.hls) throw new Error('MSE-capable browsers must use the retry-capable HLS engine');
       console.log('playback support', JSON.stringify({ native: document.querySelector('video').canPlayType('application/vnd.apple.mpegurl'), mse: Hls.isSupported(), engine: !!window.player.hls }));
       window.player.hls?.on(Hls.Events.ERROR, (_, data) => console.log('HLS diagnostic', JSON.stringify({ type: data.type, details: data.details, fatal: data.fatal, error: data.error?.message, reason: data.reason })));
     });
