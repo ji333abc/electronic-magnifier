@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 
 const base = process.argv[2];
-const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ channel: 'chrome', args: ['--autoplay-policy=no-user-gesture-required'] });
 try {
   for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
     const context = await browser.newContext({ viewport });
@@ -26,6 +26,7 @@ try {
       }
     });
     await page.goto(`${base}/fixture`);
+    assert(await page.evaluate(() => MediaSource.isTypeSupported('video/mp4;codecs="avc1.42C00B"')), 'test browser must include the camera H.264 decoder');
     await page.evaluate(() => {
       window.failures = [];
       window.player = new window.RecordingPlayback(document.querySelector('video'), {

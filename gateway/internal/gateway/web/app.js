@@ -707,7 +707,7 @@ const recordingPlayback = new window.RecordingPlayback(elements.recordingPlayer,
   onError(reason) {
     elements.recordingPlayerEmpty.textContent = reason === 'recording_missing'
       ? '这个时段的录像已缺失或过期，请选择其他片段。'
-      : reason === 'unsupported_browser' ? '当前浏览器不支持录像回放，请更换浏览器。'
+      : reason === 'unsupported_browser' || reason === 'unsupported_codec' ? '当前浏览器不支持此录像编码，请更换浏览器。'
       : '录像加载失败，请刷新列表后重试。';
     elements.recordingPlayerEmpty.classList.remove('hidden');
     elements.recordingNow.textContent = '可重新选择片段重试。';

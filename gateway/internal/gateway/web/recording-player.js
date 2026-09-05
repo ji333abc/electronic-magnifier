@@ -62,6 +62,11 @@ window.RecordingPlayback = class RecordingPlayback {
         return;
       }
       if (!data.fatal) return; // hls.js retries individual fragments first.
+      if (data.details === 'bufferAddCodecError') {
+        this.close();
+        this.onError('unsupported_codec');
+        return;
+      }
       if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries++ < 1) {
         hls.recoverMediaError();
         return;

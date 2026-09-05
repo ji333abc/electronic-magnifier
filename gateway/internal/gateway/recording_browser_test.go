@@ -16,7 +16,8 @@ import (
 )
 
 // Run only in Actions with the official MediaMTX binary, FFmpeg and Playwright.
-// This exercises actual muxing, HLS demuxing, decoding, seeking and CSP together.
+// Google Chrome supplies the camera's H.264 codec. This exercises actual
+// muxing, HLS demuxing, decoding, seeking and CSP together.
 func TestRecordingBrowser(t *testing.T) {
 	mediamtx := os.Getenv("PLAYBACK_TEST_MEDIAMTX")
 	if mediamtx == "" {
